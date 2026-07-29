@@ -43,6 +43,27 @@ def strip_mention(content):
     return pattern.sub("", content).strip()
 
 
+def truncate_reply(text, max_chars):
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+
+    cut = text[:max_chars]
+    # Corta no ultimo fim de paragrafo/frase antes do limite, pra nao truncar no
+    # meio de uma palavra ou frase quando o modelo ignorar a instrucao de ser breve.
+    best_break = max(
+        cut.rfind("\n\n"),
+        cut.rfind(". "),
+        cut.rfind("! "),
+        cut.rfind("? "),
+        cut.rfind("\n"),
+    )
+    if best_break > max_chars * 0.5:
+        cut = cut[: best_break + 1]
+
+    return cut.rstrip() + "\n-# (resposta cortada por ser muito longa)"
+
+
 @client.event
 async def on_ready():
     print(f"Bot conectado como {client.user}")
@@ -100,6 +121,7 @@ async def on_message(message):
 
             try:
                 reply = await generate_reply(messages)
+                reply = truncate_reply(reply, config.max_reply_chars)[:2000]
                 add_message(
                     channel_id, str(user_id), message.author.name, "user", text, config.memory_max_messages
                 )
@@ -111,7 +133,7 @@ async def on_message(message):
                     reply,
                     config.memory_max_messages,
                 )
-                await message.reply(reply[:2000])
+                await message.reply(reply)
             except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
                 print(f"[bot] Erro ao gerar resposta: {err}")
                 await message.reply(

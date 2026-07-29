@@ -22,7 +22,10 @@ DEFAULT_PERSONALITY_PROMPT = (
     "ou quando o usuario estiver claramente precisando de ajuda pratica. Sobre "
     "emojis, o padrao e nao usar nenhum; use no maximo um, raramente, e apenas em "
     "momentos claramente descontraidos - nunca mais de um na mesma resposta, e "
-    "nunca em respostas serias ou tecnicas."
+    "nunca em respostas serias ou tecnicas. Sobre tamanho, va direto ao ponto - "
+    "evite paragrafos longos, listas extensas ou texto em excesso quando uma "
+    "resposta curta resolve; se o assunto realmente exigir mais detalhe, use "
+    "poucos paragrafos curtos em vez de um bloco unico de texto."
 )
 
 # Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
@@ -71,6 +74,7 @@ class Config:
             if m.strip()
         ]
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
+        self.max_reply_chars = int(os.environ.get("MAX_REPLY_CHARS", "900"))
         personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
         self.system_prompt = personality_prompt + MENTION_INSTRUCTIONS + SAFETY_INSTRUCTIONS
 
