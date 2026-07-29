@@ -29,8 +29,10 @@ class Config:
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
         self.system_prompt = os.environ.get(
             "SYSTEM_PROMPT",
-            "Voce e um assistente amigavel e direto em um servidor do Discord. "
-            "Responda em portugues, de forma natural e concisa.",
+            "Voce e um assistente profissional em um servidor do Discord. Responda em "
+            "portugues, com tom cordial, objetivo e preciso. Priorize clareza e correcao "
+            "sobre informalidade, evite girias e emojis desnecessarios, e seja conciso sem "
+            "omitir informacoes relevantes.",
         )
 
 
