@@ -64,6 +64,41 @@ def truncate_reply(text, max_chars):
     return cut.rstrip() + "\n-# (resposta cortada por ser muito longa)"
 
 
+CONFIRM_EMOJI = "✅"
+CANCEL_EMOJI = "❌"
+CONFIRMATION_TIMEOUT_SECONDS = 30
+
+
+async def ask_confirmation(message, question):
+    """Pede confirmacao por reacao ao autor da mensagem original. Retorna True/False."""
+    prompt = await message.reply(
+        f"{question}\nReaja com {CONFIRM_EMOJI} para confirmar ou {CANCEL_EMOJI} "
+        f"para cancelar (expira em {CONFIRMATION_TIMEOUT_SECONDS}s)."
+    )
+    await prompt.add_reaction(CONFIRM_EMOJI)
+    await prompt.add_reaction(CANCEL_EMOJI)
+
+    def check(reaction, user):
+        return (
+            reaction.message.id == prompt.id
+            and user.id == message.author.id
+            and str(reaction.emoji) in (CONFIRM_EMOJI, CANCEL_EMOJI)
+        )
+
+    try:
+        reaction, _ = await client.wait_for(
+            "reaction_add", timeout=CONFIRMATION_TIMEOUT_SECONDS, check=check
+        )
+    except asyncio.TimeoutError:
+        await prompt.edit(content=f"{question}\n\n-# Tempo esgotado, nada foi feito.")
+        return False
+
+    confirmed = str(reaction.emoji) == CONFIRM_EMOJI
+    outcome = "Confirmado." if confirmed else "Cancelado."
+    await prompt.edit(content=f"{question}\n\n-# {outcome}")
+    return confirmed
+
+
 async def handle_mode_command(message, channel_id, text):
     parts = text.split(maxsplit=1)
     requested = parts[1].strip().lower() if len(parts) > 1 else ""
@@ -82,8 +117,12 @@ async def handle_mode_command(message, channel_id, text):
         await message.reply(f"Modo '{requested}' nao existe. Opcoes: {options}.")
         return
 
-    set_persona(channel_id, requested)
-    await message.reply(f"Modo alterado para **{requested}**.")
+    confirmed = await ask_confirmation(
+        message, f"Confirma trocar o modo deste canal para **{requested}**?"
+    )
+    if confirmed:
+        set_persona(channel_id, requested)
+        await message.channel.send(f"Modo alterado para **{requested}**.")
 
 
 @client.event
@@ -101,8 +140,12 @@ async def on_message(message):
     channel_id = str(message.channel.id)
 
     if text == "!reset":
-        clear_history(channel_id)
-        await message.reply("Memoria apagada. Podemos comecar do zero.")
+        confirmed = await ask_confirmation(
+            message, "Tem certeza que quer apagar a memoria deste canal?"
+        )
+        if confirmed:
+            clear_history(channel_id)
+            await message.channel.send("Memoria apagada. Podemos comecar do zero.")
         return
 
     if text.lower().startswith("!modo"):
