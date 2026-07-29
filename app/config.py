@@ -28,6 +28,26 @@ DEFAULT_PERSONALITY_PROMPT = (
     "poucos paragrafos curtos em vez de um bloco unico de texto."
 )
 
+REALISTIC_TEEN_PROMPT = (
+    "Modo realista ativado: agora voce fala como um adolescente brasileiro comum "
+    "batendo papo no Discord com os amigos. Super descontraido, gírias atuais, "
+    "frases curtas, sem formalidade nenhuma - fale como gente de verdade "
+    "conversando, nao como um assistente ou robo. Pode ser sarcastico de leve, "
+    "brincar e reclamar de coisas do dia a dia, mas sem ser grosseiro ou ofender "
+    "ninguem de verdade. Aqui, ao contrario do modo padrao, emojis podem aparecer "
+    "com mais liberdade quando fizer sentido - mas ainda sem exagero (nada de "
+    "encher a mensagem de emoji)."
+)
+
+# Personas ativaveis via comando (ver app/main.py, comando "!modo <nome>"). A
+# escolhida fica salva por canal no banco. "padrao" usa o SYSTEM_PROMPT configurado
+# (env var ou o default acima); as demais sao presets fixos no codigo.
+PERSONA_PRESETS = {
+    "padrao": None,  # None = usa personality_prompt normal (env var ou default)
+    "realista": REALISTIC_TEEN_PROMPT,
+}
+DEFAULT_PERSONA_KEY = "padrao"
+
 # Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
 # usuario no historico/prompt vem no formato "**nome** (id: 123): texto" - o id e
 # fornecido pelo codigo (app/main.py), nao inventado pelo modelo.
@@ -75,8 +95,12 @@ class Config:
         ]
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
         self.max_reply_chars = int(os.environ.get("MAX_REPLY_CHARS", "900"))
-        personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
-        self.system_prompt = personality_prompt + MENTION_INSTRUCTIONS + SAFETY_INSTRUCTIONS
+        self.default_personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
+        self.system_prompt = self.build_system_prompt(DEFAULT_PERSONA_KEY)
+
+    def build_system_prompt(self, persona_key):
+        personality = PERSONA_PRESETS.get(persona_key) or self.default_personality_prompt
+        return personality + MENTION_INSTRUCTIONS + SAFETY_INSTRUCTIONS
 
 
 config = Config()

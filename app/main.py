@@ -3,8 +3,8 @@ import re
 
 import discord
 
-from .config import config
-from .db import add_message, clear_history, get_history
+from .config import PERSONA_PRESETS, config
+from .db import add_message, clear_history, get_history, get_persona, set_persona
 from .openrouter import generate_reply
 
 intents = discord.Intents.default()
@@ -64,6 +64,28 @@ def truncate_reply(text, max_chars):
     return cut.rstrip() + "\n-# (resposta cortada por ser muito longa)"
 
 
+async def handle_mode_command(message, channel_id, text):
+    parts = text.split(maxsplit=1)
+    requested = parts[1].strip().lower() if len(parts) > 1 else ""
+
+    if not requested:
+        current = get_persona(channel_id) or "padrao"
+        options = ", ".join(PERSONA_PRESETS.keys())
+        await message.reply(
+            f"Modo atual: **{current}**. Opcoes disponiveis: {options}. "
+            f"Use `!modo <nome>` para trocar."
+        )
+        return
+
+    if requested not in PERSONA_PRESETS:
+        options = ", ".join(PERSONA_PRESETS.keys())
+        await message.reply(f"Modo '{requested}' nao existe. Opcoes: {options}.")
+        return
+
+    set_persona(channel_id, requested)
+    await message.reply(f"Modo alterado para **{requested}**.")
+
+
 @client.event
 async def on_ready():
     print(f"Bot conectado como {client.user}")
@@ -81,6 +103,10 @@ async def on_message(message):
     if text == "!reset":
         clear_history(channel_id)
         await message.reply("Memoria apagada. Podemos comecar do zero.")
+        return
+
+    if text.lower().startswith("!modo"):
+        await handle_mode_command(message, channel_id, text)
         return
 
     if not text:
@@ -113,8 +139,11 @@ async def on_message(message):
                 mentions_list = ", ".join(f"**{m.name}** (id: {m.id})" for m in mentioned_users)
                 current_content += f"\n(usuarios mencionados de verdade nesta mensagem: {mentions_list})"
 
+            persona_key = get_persona(channel_id) or "padrao"
+            system_prompt = config.build_system_prompt(persona_key)
+
             messages = [
-                {"role": "system", "content": config.system_prompt},
+                {"role": "system", "content": system_prompt},
                 *formatted_history,
                 {"role": "user", "content": current_content},
             ]
