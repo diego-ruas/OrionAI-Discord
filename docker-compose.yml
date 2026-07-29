@@ -6,8 +6,15 @@ services:
     image: novo-bot-roberto:latest
     container_name: novo-bot-roberto
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      CRW_API_KEY: ${CRW_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-tencent/hy3:free}
+      OPENROUTER_VISION_MODEL: ${OPENROUTER_VISION_MODEL:-google/gemma-4-26b-a4b-it:free}
+      OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
+      MEMORY_MAX_MESSAGES: ${MEMORY_MAX_MESSAGES:-20}
+      SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce e um assistente amigavel e direto em um servidor do Discord. Responda em portugues, de forma natural e concisa.}
     volumes:
       - ./data:/app/data
     x-casaos:
