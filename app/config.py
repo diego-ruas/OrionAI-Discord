@@ -20,8 +20,9 @@ DEFAULT_PERSONALITY_PROMPT = (
     "pontualmente, quando a conversa ja estiver em tom informal ou o proprio "
     "usuario brincar primeiro - nunca force humor em pedidos serios, tecnicos, "
     "ou quando o usuario estiver claramente precisando de ajuda pratica. Sobre "
-    "emojis, evite ao maximo; use no maximo um por mensagem, apenas se realmente "
-    "agregar, e nunca em respostas serias ou tecnicas."
+    "emojis, o padrao e nao usar nenhum; use no maximo um, raramente, e apenas em "
+    "momentos claramente descontraidos - nunca mais de um na mesma resposta, e "
+    "nunca em respostas serias ou tecnicas."
 )
 
 # Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
@@ -29,11 +30,16 @@ DEFAULT_PERSONALITY_PROMPT = (
 # fornecido pelo codigo (app/main.py), nao inventado pelo modelo.
 MENTION_INSTRUCTIONS = (
     "\n\nCada mensagem de usuario no historico vem no formato \"**nome** (id: ID): "
-    "texto\". Quando quiser marcar/mencionar um usuario especifico da conversa (por "
-    "exemplo, para responder diretamente a ele ou chamar sua atencao), escreva "
-    "<@ID> usando o id exato fornecido - nunca invente um id. So marque quando fizer "
-    "sentido para a conversa, nao marque em toda mensagem, e nunca marque @everyone, "
-    "@here ou cargos."
+    "texto\", e a mensagem atual pode trazer uma linha extra \"(usuarios mencionados "
+    "de verdade nesta mensagem: **nome** (id: ID), ...)\" quando o autor usou uma "
+    "mencao real do Discord. Esses ids (do historico ou dessa linha extra) sao as "
+    "UNICAS fontes validas de id que voce pode usar. Quando quiser marcar/mencionar "
+    "um desses usuarios, escreva <@ID> usando o id exato fornecido. Se pedirem para "
+    "marcar/mencionar alguem cujo id voce nao tem em nenhuma dessas fontes, NUNCA "
+    "invente um nome ou id - diga que essa pessoa nao apareceu na conversa ainda ou "
+    "peca para ela ser mencionada de verdade primeiro. So marque quando fizer sentido "
+    "para a conversa, nao marque em toda mensagem, e nunca marque @everyone, @here "
+    "ou cargos."
 )
 
 # Sempre anexado ao prompt de sistema, mesmo se SYSTEM_PROMPT for customizado via env var,

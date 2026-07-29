@@ -83,13 +83,19 @@ async def on_message(message):
                 else:
                     formatted_history.append({"role": h["role"], "content": h["content"]})
 
+            current_content = f"**{message.author.name}** (id: {user_id}): {text}"
+
+            # Usuarios que o Discord ja resolveu de verdade (o autor usou @ de fato),
+            # para o modelo ter ids confiaveis em vez de adivinhar a partir de nomes soltos.
+            mentioned_users = [m for m in message.mentions if m.id != client.user.id]
+            if mentioned_users:
+                mentions_list = ", ".join(f"**{m.name}** (id: {m.id})" for m in mentioned_users)
+                current_content += f"\n(usuarios mencionados de verdade nesta mensagem: {mentions_list})"
+
             messages = [
                 {"role": "system", "content": config.system_prompt},
                 *formatted_history,
-                {
-                    "role": "user",
-                    "content": f"**{message.author.name}** (id: {user_id}): {text}",
-                },
+                {"role": "user", "content": current_content},
             ]
 
             try:
