@@ -13,7 +13,12 @@ intents.guilds = True
 intents.guild_messages = True
 intents.dm_messages = True
 
-client = discord.Client(intents=intents)
+client = discord.Client(
+    intents=intents,
+    # So permite marcar usuarios especificos; bloqueia @everyone/@here/cargos mesmo
+    # que o modelo tente gerar isso (defesa contra jailbreak/injecao gerando spam de ping).
+    allowed_mentions=discord.AllowedMentions(everyone=False, users=True, roles=False),
+)
 
 # Evita respostas simultaneas concorrentes para o mesmo usuario (protege a memoria/historico).
 _locks_by_user = {}
@@ -64,12 +69,16 @@ async def on_message(message):
         async with message.channel.typing():
             history = get_history(channel_id, config.memory_max_messages)
 
-            # Formata historico com nome do usuario se houver multiplos usuarios
+            # Formata historico com nome + id do usuario (para o modelo poder marcar
+            # alguem usando <@id> quando fizer sentido) se houver multiplos usuarios
             formatted_history = []
             for h in history:
                 if h["role"] == "user" and h["username"] and h["username"] != "Unknown":
                     formatted_history.append(
-                        {"role": h["role"], "content": f"**{h['username']}**: {h['content']}"}
+                        {
+                            "role": h["role"],
+                            "content": f"**{h['username']}** (id: {h['user_id']}): {h['content']}",
+                        }
                     )
                 else:
                     formatted_history.append({"role": h["role"], "content": h["content"]})
@@ -77,7 +86,10 @@ async def on_message(message):
             messages = [
                 {"role": "system", "content": config.system_prompt},
                 *formatted_history,
-                {"role": "user", "content": f"**{message.author.name}**: {text}"},
+                {
+                    "role": "user",
+                    "content": f"**{message.author.name}** (id: {user_id}): {text}",
+                },
             ]
 
             try:

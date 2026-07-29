@@ -24,6 +24,18 @@ DEFAULT_PERSONALITY_PROMPT = (
     "agregar, e nunca em respostas serias ou tecnicas."
 )
 
+# Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
+# usuario no historico/prompt vem no formato "**nome** (id: 123): texto" - o id e
+# fornecido pelo codigo (app/main.py), nao inventado pelo modelo.
+MENTION_INSTRUCTIONS = (
+    "\n\nCada mensagem de usuario no historico vem no formato \"**nome** (id: ID): "
+    "texto\". Quando quiser marcar/mencionar um usuario especifico da conversa (por "
+    "exemplo, para responder diretamente a ele ou chamar sua atencao), escreva "
+    "<@ID> usando o id exato fornecido - nunca invente um id. So marque quando fizer "
+    "sentido para a conversa, nao marque em toda mensagem, e nunca marque @everyone, "
+    "@here ou cargos."
+)
+
 # Sempre anexado ao prompt de sistema, mesmo se SYSTEM_PROMPT for customizado via env var,
 # para que usuarios do Discord nao consigam desativar essas protecoes via env var do bot.
 SAFETY_INSTRUCTIONS = (
@@ -54,7 +66,7 @@ class Config:
         ]
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
         personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
-        self.system_prompt = personality_prompt + SAFETY_INSTRUCTIONS
+        self.system_prompt = personality_prompt + MENTION_INSTRUCTIONS + SAFETY_INSTRUCTIONS
 
 
 config = Config()
