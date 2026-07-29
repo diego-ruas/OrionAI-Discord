@@ -1,0 +1,36 @@
+name: novo-bot-roberto
+
+services:
+  novo-bot-roberto:
+    build: .
+    image: novo-bot-roberto:latest
+    container_name: novo-bot-roberto
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    x-casaos:
+      envs:
+        - container: DISCORD_TOKEN
+          description:
+            en_us: Discord bot token
+        - container: OPENROUTER_API_KEY
+          description:
+            en_us: OpenRouter API key
+        - container: CRW_API_KEY
+          description:
+            en_us: fastCRW API key (optional, used for web_search/fetch_page tools)
+      volumes:
+        - container: /app/data
+          description:
+            en_us: Persistent SQLite memory storage
+      main: novo-bot-roberto
+      description:
+        en_us: Discord bot with free AI via OpenRouter and per-user persistent memory
+      tagline:
+        en_us: Discord AI bot
+      title:
+        en_us: Novo Bot Roberto
+      category: Utilities
+      port_map: ""
