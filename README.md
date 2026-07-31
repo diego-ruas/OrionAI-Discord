@@ -8,14 +8,16 @@ A versao original em Node.js foi removida do repositorio.
 ```
 app/
   main.py            # cliente discord.py e loop de mensagens
-  config.py           # leitura das variaveis de ambiente
-  db.py               # historico em SQLite (sqlite3 stdlib)
-  openrouter.py        # chamadas ao OpenRouter com suporte a tools e fallback de modelos
+  config.py           # variaveis de ambiente, personas e blocos fixos do prompt
+  db.py               # SQLite (sqlite3 stdlib): historico, fatos e contexto do canal
+  openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
   tools/
-    __init__.py        # definicoes de tools (web_search, fetch_page)
+    __init__.py        # definicoes de tools (web_search, fetch_page, remember_fact, forget_fact)
     crw.py              # integracao com fastCRW
   utils/
-    image_processor.py  # download/base64 de anexos de imagem (preparado para vision)
+    image_processor.py  # download/base64 de anexos de imagem
+    reply_format.py     # corte limpo e quebra da resposta em varias mensagens
+    clock.py            # data/hora local para o bot saber o dia e o horario
 ```
 
 ## Rodando localmente
@@ -66,7 +68,68 @@ Para ver logs:
 docker compose logs -f
 ```
 
+## Como o bot entra na conversa
+
+O bot responde quando:
+
+- e mencionado com `@`;
+- alguem responde (reply) uma mensagem dele;
+- e chamado pelo nome no meio da frase (configuravel em `BOT_NAMES`);
+- recebe DM;
+- a pessoa continua falando com ele logo depois de ter sido respondida, dentro da
+  janela de `FOLLOWUP_WINDOW_SECONDS` - sem precisar de `@` em cada mensagem. Se a
+  pessoa mencionar ou responder outra pessoa nesse meio tempo, o bot entende que a
+  conversa nao e com ele e fica calado.
+
+As demais mensagens do canal nao geram resposta, mas as ultimas
+`AMBIENT_CONTEXT_MESSAGES` ficam guardadas como contexto ("do que estavam falando")
+para quando ele for chamado. Coloque `AMBIENT_CONTEXT_MESSAGES=0` para desligar isso.
+
+## Conversa natural
+
+Alguns comportamentos existem so para a conversa nao soar como saida de maquina:
+
+- respostas longas saem quebradas em varias mensagens curtas nos paragrafos, com
+  indicador de digitacao e pausa proporcional ao tamanho entre elas
+  (`SPLIT_REPLIES`, `MAX_REPLY_MESSAGES`, `TYPING_CHARS_PER_SECOND`);
+- blocos de codigo nunca sao partidos no meio;
+- o bot responde sem pingar o autor, mantendo o link da mensagem sem a notificacao;
+- um bloco fixo do prompt (em `app/config.py`) corta os vicios tipicos de texto
+  gerado: repetir a pergunta, abrir com "Claro!", fechar com "espero ter ajudado",
+  listar em topicos uma conversa casual, perguntar algo de volta em toda mensagem;
+- o bot sabe a data, a hora e o periodo do dia (`TIMEZONE`), o canal e o servidor
+  em que esta;
+- quando alguem responde a mensagem de outra pessoa, o trecho citado entra no
+  contexto.
+
+## Memoria
+
+Sao duas memorias diferentes:
+
+- **Historico**: as ultimas `MEMORY_MAX_MESSAGES` mensagens do canal. Rotativo, e
+  apagado por `!reset`.
+- **Longo prazo**: fatos que o proprio modelo decide salvar (apelido, profissao,
+  projetos, preferencias de resposta) com a ferramenta `remember_fact`. Sobrevive a
+  rotacao do historico e ao `!reset`; e visivel com `!memoria` e removivel com
+  `!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
+
+## Imagens
+
+Mande uma imagem (jpeg/png/gif/webp) junto da mensagem e ela e enviada ao modelo de
+visao configurado em `OPENROUTER_VISION_MODEL`. Nessas chamadas as ferramentas ficam
+desligadas, porque a maioria dos modelos de visao gratuitos nao as suporta.
+
 ## Comandos do bot
 
-- Mencione o bot ou mande DM para conversar.
-- `!reset` (mencionando o bot, ou em DM) apaga o historico daquele canal.
+Todos funcionam mencionando o bot no canal, ou direto em DM:
+
+- `!ajuda` - lista os comandos e as formas de chamar o bot.
+- `!modo` - mostra o modo atual e as opcoes; `!modo <nome>` troca (pede confirmacao
+  por reacao). Modos: `padrao`, `realista`, `casual`, `sarcastico`, `professor`,
+  `direto`. A escolha e por canal e fica salva no banco.
+- `!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
+- `!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
+  `!memoria`); `!esquecer tudo` apaga todos, pedindo confirmacao.
+- `!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, hora atual.
+- `!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao
+  apaga a memoria de longo prazo.

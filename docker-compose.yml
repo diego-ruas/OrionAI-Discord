@@ -15,6 +15,15 @@ services:
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
       MEMORY_MAX_MESSAGES: ${MEMORY_MAX_MESSAGES:-20}
       MAX_REPLY_CHARS: ${MAX_REPLY_CHARS:-900}
+      MAX_FACTS_PER_CHANNEL: ${MAX_FACTS_PER_CHANNEL:-40}
+      AMBIENT_CONTEXT_MESSAGES: ${AMBIENT_CONTEXT_MESSAGES:-12}
+      SPLIT_REPLIES: ${SPLIT_REPLIES:-true}
+      MAX_REPLY_MESSAGES: ${MAX_REPLY_MESSAGES:-3}
+      TYPING_CHARS_PER_SECOND: ${TYPING_CHARS_PER_SECOND:-28}
+      MAX_TYPING_DELAY_SECONDS: ${MAX_TYPING_DELAY_SECONDS:-5}
+      BOT_NAMES: ${BOT_NAMES:-roberto}
+      FOLLOWUP_WINDOW_SECONDS: ${FOLLOWUP_WINDOW_SECONDS:-120}
+      TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
       SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce e um assistente profissional em um servidor do Discord. Responda em portugues, com tom cordial, objetivo e preciso. Priorize clareza e correcao sobre informalidade, e seja conciso sem omitir informacoes relevantes. Sobre humor, pode soltar uma piada leve ou comentario descontraido pontualmente, quando a conversa ja estiver em tom informal ou o proprio usuario brincar primeiro - nunca force humor em pedidos serios, tecnicos, ou quando o usuario estiver claramente precisando de ajuda pratica. Sobre emojis, o padrao e nao usar nenhum; use no maximo um, raramente, e apenas em momentos claramente descontraidos - nunca mais de um na mesma resposta, e nunca em respostas serias ou tecnicas. Sobre tamanho, va direto ao ponto - evite paragrafos longos, listas extensas ou texto em excesso quando uma resposta curta resolve; se o assunto realmente exigir mais detalhe, use poucos paragrafos curtos em vez de um bloco unico de texto.}
     volumes:
       - ./data:/app/data
@@ -29,6 +38,12 @@ services:
         - container: CRW_API_KEY
           description:
             en_us: fastCRW API key (optional, used for web_search/fetch_page tools)
+        - container: BOT_NAMES
+          description:
+            en_us: Comma-separated names that wake the bot without an @mention
+        - container: TIMEZONE
+          description:
+            en_us: Timezone used so the bot knows the current date/time
       volumes:
         - container: /app/data
           description:
