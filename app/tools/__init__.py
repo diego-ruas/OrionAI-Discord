@@ -1,7 +1,9 @@
 import json
 
+from .. import db
 from ..config import config
 from ..db import add_fact, forget_facts
+from ..utils.clock import describe_timestamp, now_ms, parse_local_datetime
 from .crw import fetch_page, web_search
 
 # Ferramentas cujo resultado vem da internet: conteudo nao confiavel, que precisa ser
@@ -94,7 +96,101 @@ tool_definitions = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_reminder",
+            "description": (
+                "Agenda um lembrete para ser entregue neste mesmo canal, marcando quem "
+                "pediu. Use quando a pessoa pedir para ser lembrada ou avisada de algo "
+                "mais tarde. Informe in_minutes para pedidos relativos ('em 2 horas') ou "
+                "at para dia e hora especificos - um dos dois, nunca os dois juntos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": (
+                            "Assunto do lembrete, curto e na segunda pessoa, ex: "
+                            "'tomar o remedio'"
+                        ),
+                    },
+                    "in_minutes": {
+                        "type": "integer",
+                        "description": "Minutos a partir de agora, ex: 120 para 2 horas",
+                    },
+                    "at": {
+                        "type": "string",
+                        "description": (
+                            "Dia e hora no formato 'AAAA-MM-DD HH:MM' (24h), no fuso "
+                            "local. Aceita tambem so 'HH:MM' para o proximo horario."
+                        ),
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
 ]
+
+
+def _schedule_reminder(args, context):
+    channel_id = context.get("channel_id")
+    user_id = context.get("user_id")
+    if not channel_id or not user_id:
+        raise RuntimeError("Sem canal ou usuario para agendar o lembrete.")
+
+    text = (args.get("text") or "").strip()
+    if not text:
+        return "Nao agendei: o lembrete precisa de um assunto."
+
+    if db.count_pending_reminders(user_id) >= config.max_reminders_per_user:
+        return (
+            f"Nao agendei: essa pessoa ja tem {config.max_reminders_per_user} lembretes "
+            "pendentes, o maximo permitido. Ela precisa cancelar algum com !cancelar."
+        )
+
+    in_minutes = args.get("in_minutes")
+    at = (args.get("at") or "").strip()
+
+    if in_minutes is not None and at:
+        return "Nao agendei: use in_minutes OU at, nunca os dois na mesma chamada."
+
+    now = now_ms()
+    if in_minutes is not None:
+        try:
+            minutes = int(in_minutes)
+        except (TypeError, ValueError):
+            return f"Nao agendei: '{in_minutes}' nao e um numero de minutos valido."
+        if minutes < 1:
+            return "Nao agendei: o lembrete tem que ser para pelo menos 1 minuto adiante."
+        remind_at = now + minutes * 60_000
+    elif at:
+        try:
+            remind_at = parse_local_datetime(at, config.timezone)
+        except ValueError as err:
+            return f"Nao agendei: {err}. Pergunte o horario de novo, mais claro."
+    else:
+        return "Nao agendei: falta in_minutes ou at."
+
+    if remind_at <= now:
+        return (
+            "Nao agendei: esse horario ja passou. Confirme com a pessoa para quando ela "
+            "quer o lembrete."
+        )
+
+    horizon = now + config.max_reminder_days * 86_400_000
+    if remind_at > horizon:
+        return (
+            f"Nao agendei: nao consigo agendar para mais de {config.max_reminder_days} "
+            "dias a frente."
+        )
+
+    db.add_reminder(channel_id, user_id, context.get("username"), text[:500], remind_at)
+    return (
+        f"Lembrete agendado para {describe_timestamp(remind_at, config.timezone)}: {text}"
+    )
 
 
 async def run_tool(name, args, context=None):
@@ -127,5 +223,8 @@ async def run_tool(name, args, context=None):
         if removed:
             return f"{removed} fato(s) esquecido(s)."
         return "Nenhum fato memorizado corresponde a esse texto."
+
+    if name == "schedule_reminder":
+        return _schedule_reminder(args, context)
 
     raise RuntimeError(f"Ferramenta desconhecida: {name}")

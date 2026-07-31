@@ -3,23 +3,29 @@ import re
 import time
 
 import discord
+from discord.ext import tasks
 
 from .config import PERSONA_DESCRIPTIONS, PERSONA_PRESETS, config
 from .db import (
     add_ambient_message,
     add_message,
+    cancel_reminder,
     clear_facts,
     clear_history,
     count_messages,
     delete_fact,
     get_ambient_messages,
+    get_due_reminders,
     get_facts,
     get_history,
+    get_pending_reminders,
     get_persona,
+    mark_reminder_delivered,
+    purge_old_reminders,
     set_persona,
 )
 from .openrouter import build_image_content, generate_reply, generate_vision_reply
-from .utils.clock import now_description
+from .utils.clock import describe_timestamp, now_description, now_ms
 from .utils.image_processor import extract_images, has_images
 from .utils.reply_format import split_reply, truncate_reply, typing_delay
 
@@ -205,11 +211,16 @@ HELP_TEXT = (
     "Me marque com @, responda uma mensagem minha, me chame pelo nome ou me manda DM. "
     "Depois de eu responder, voce pode continuar falando por alguns instantes sem "
     "precisar me marcar de novo. Se mandar uma imagem junto, eu olho a imagem.\n\n"
+    "**Lembretes**\n"
+    "Pede na conversa mesmo: \"me lembra em 20 minutos de tirar o bolo\" ou \"me avisa "
+    "amanha as 9 da reuniao\". Eu aviso neste mesmo canal, te marcando.\n\n"
     "**Comandos**\n"
     "`!ajuda` - esta mensagem\n"
     "`!modo` - ver o modo atual e as opcoes; `!modo <nome>` troca\n"
     "`!memoria` - ver o que eu lembro deste canal\n"
     "`!esquecer <numero>` - apagar um item da memoria (`!esquecer tudo` apaga todos)\n"
+    "`!lembretes` - ver seus lembretes agendados\n"
+    "`!cancelar <numero>` - cancelar um lembrete\n"
     "`!status` - modelo, modo e tamanho da memoria deste canal\n"
     "`!reset` - apagar o historico de conversa deste canal"
 )
@@ -304,6 +315,54 @@ async def handle_forget_command(message, channel_id, text):
         await message.reply(f"Esqueci: {target['fact']}")
 
 
+async def handle_reminders_command(message, channel_id):
+    reminders = get_pending_reminders(user_id=str(message.author.id))
+    if not reminders:
+        await message.reply(
+            "Voce nao tem lembretes agendados. Pode me pedir na conversa mesmo, tipo "
+            "\"me lembra em 20 minutos de tirar o bolo do forno\"."
+        )
+        return
+
+    lines = []
+    for index, reminder in enumerate(reminders, start=1):
+        when = describe_timestamp(reminder["remind_at"], config.timezone)
+        where = "" if reminder["channel_id"] == channel_id else " (em outro canal)"
+        lines.append(f"{index}. **{when}**{where} - {reminder['text']}")
+
+    body = "\n".join(lines)
+    reply = (
+        f"Seus lembretes:\n{body}\n\n-# Use `!cancelar <numero>` para cancelar um deles."
+    )
+    await message.reply(reply[:2000])
+
+
+async def handle_cancel_command(message, text):
+    parts = text.split(maxsplit=1)
+    argument = parts[1].strip() if len(parts) > 1 else ""
+
+    if not argument.isdigit():
+        await message.reply(
+            "Use `!cancelar <numero>`, com o numero que aparece em `!lembretes`."
+        )
+        return
+
+    reminders = get_pending_reminders(user_id=str(message.author.id))
+    position = int(argument)
+    if position < 1 or position > len(reminders):
+        await message.reply(
+            f"Nao existe lembrete {position}. Voce tem {len(reminders)} agendado(s)."
+        )
+        return
+
+    target = reminders[position - 1]
+    # cancel_reminder confere o dono, entao ninguem cancela lembrete de outra pessoa.
+    if cancel_reminder(target["id"], str(message.author.id)):
+        await message.reply(f"Cancelado: {target['text']}")
+    else:
+        await message.reply("Esse lembrete ja nao estava mais pendente.")
+
+
 async def handle_status_command(message, channel_id):
     persona = get_persona(channel_id) or "padrao"
     fact_count = len(get_facts(channel_id))
@@ -317,11 +376,23 @@ async def handle_status_command(message, channel_id):
         f"Historico deste canal: {stored}/{config.memory_max_messages} mensagens\n"
         f"Memoria de longo prazo: {fact_count}/{config.max_facts_per_channel} itens\n"
         f"Contexto do canal captado: {ambient} mensagens\n"
+        f"Seus lembretes pendentes: {len(get_pending_reminders(user_id=str(message.author.id)))}"
+        f"/{config.max_reminders_per_user}\n"
         f"Agora: {now_description(config.timezone)}"
     )
 
 
-COMMANDS = ("!ajuda", "!help", "!reset", "!modo", "!memoria", "!esquecer", "!status")
+COMMANDS = (
+    "!ajuda",
+    "!help",
+    "!reset",
+    "!modo",
+    "!memoria",
+    "!esquecer",
+    "!status",
+    "!lembretes",
+    "!cancelar",
+)
 
 
 async def handle_command(message, channel_id, text):
@@ -352,6 +423,10 @@ async def handle_command(message, channel_id, text):
         await handle_forget_command(message, channel_id, text)
     elif command == "!status":
         await handle_status_command(message, channel_id)
+    elif command == "!lembretes":
+        await handle_reminders_command(message, channel_id)
+    elif command == "!cancelar":
+        await handle_cancel_command(message, text)
 
     return True
 
@@ -438,12 +513,94 @@ def build_current_content(message, text, replied_to, image_names):
     return content
 
 
+# --- Lembretes ---
+
+# Um dia depois de entregue, o lembrete sai da tabela.
+REMINDER_RETENTION_MS = 86_400_000
+
+
+async def _resolve_reminder_destination(reminder):
+    """Acha onde entregar o lembrete: o canal original ou, em ultimo caso, a DM."""
+    channel_id = int(reminder["channel_id"])
+    channel = client.get_channel(channel_id)
+    if channel is not None:
+        return channel
+
+    # Canal fora do cache (comum para DMs depois de um restart).
+    try:
+        return await client.fetch_channel(channel_id)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as err:
+        print(f"[lembretes] Canal {channel_id} inacessivel ({err}), tentando DM.")
+
+    try:
+        user = client.get_user(int(reminder["user_id"])) or await client.fetch_user(
+            int(reminder["user_id"])
+        )
+        return user
+    except (discord.NotFound, discord.HTTPException) as err:
+        print(f"[lembretes] Usuario {reminder['user_id']} inacessivel: {err}")
+        return None
+
+
+async def deliver_reminder(reminder):
+    destination = await _resolve_reminder_destination(reminder)
+    if destination is None:
+        # Marca como entregue mesmo sem conseguir enviar, senao o loop tenta para sempre.
+        mark_reminder_delivered(reminder["id"])
+        print(f"[lembretes] Descartado {reminder['id']}: sem destino acessivel.")
+        return
+
+    late_by = now_ms() - reminder["remind_at"]
+    message = f"<@{reminder['user_id']}> lembrete: {reminder['text']}"
+    # Se o bot estava fora do ar na hora, avisa que esta chegando atrasado em vez de
+    # fingir que o horario foi cumprido.
+    if late_by > 5 * 60_000:
+        message += (
+            f"\n-# (era para {describe_timestamp(reminder['remind_at'], config.timezone)}, "
+            "mas eu estava fora do ar)"
+        )
+
+    try:
+        await destination.send(message)
+    except (discord.Forbidden, discord.HTTPException) as err:
+        print(f"[lembretes] Falha ao entregar {reminder['id']}: {err}")
+        # Nao marca como entregue: erro pode ser temporario, tenta na proxima rodada.
+        return
+
+    mark_reminder_delivered(reminder["id"])
+
+
+@tasks.loop(seconds=30)
+async def reminder_loop():
+    try:
+        due = get_due_reminders(now_ms())
+        for reminder in due:
+            await deliver_reminder(reminder)
+        if due:
+            purge_old_reminders(now_ms() - REMINDER_RETENTION_MS)
+    except Exception as err:  # noqa: BLE001 - o loop nunca pode morrer
+        print(f"[lembretes] Erro no loop de entrega: {err}")
+
+
+@reminder_loop.before_loop
+async def _before_reminder_loop():
+    await client.wait_until_ready()
+
+
 # --- Eventos ---
 
 
 @client.event
 async def on_ready():
     print(f"Bot conectado como {client.user}")
+    if not reminder_loop.is_running():
+        reminder_loop.change_interval(seconds=config.reminder_check_seconds)
+        reminder_loop.start()
+        pending = len(get_pending_reminders())
+        print(
+            f"[lembretes] Loop iniciado (a cada {config.reminder_check_seconds:g}s), "
+            f"{pending} pendente(s)."
+        )
 
 
 @client.event
@@ -512,7 +669,11 @@ async def on_message(message):
                 },
             ]
 
-            tool_context = {"channel_id": channel_id, "user_id": str(user_id)}
+            tool_context = {
+                "channel_id": channel_id,
+                "user_id": str(user_id),
+                "username": message.author.name,
+            }
 
             try:
                 if images:

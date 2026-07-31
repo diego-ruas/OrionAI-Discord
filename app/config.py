@@ -176,6 +176,22 @@ MEMORY_INSTRUCTIONS = (
     "forget_fact."
 )
 
+# Sempre anexado: como agendar lembretes (ferramenta schedule_reminder). O horario
+# atual vem no contexto dinamico montado pelo codigo, entao o modelo tem como calcular
+# "amanha as 9" - mas o campo relativo (in_minutes) e sempre mais seguro que a data.
+REMINDER_INSTRUCTIONS = (
+    "\n\nVoce pode agendar lembretes com a ferramenta schedule_reminder quando a pessoa "
+    "pedir para ser lembrada de algo ('me lembra em 20 minutos', 'me avisa amanha as 9'). "
+    "Prefira o campo in_minutes quando o pedido for relativo ('em 2 horas' = 120), e use "
+    "o campo at ('AAAA-MM-DD HH:MM') apenas para dia e hora especificos, calculando a "
+    "partir da data e hora atuais que estao no seu contexto. Preencha o campo text com o "
+    "assunto do lembrete escrito de forma curta e na segunda pessoa, como voce diria na "
+    "hora de avisar (ex: 'tomar o remedio'), sem repetir a palavra 'lembrete'. Confirme "
+    "em uma frase curta o que foi agendado e para quando. Se o horario estiver ambiguo ou "
+    "no passado, pergunte antes de agendar em vez de adivinhar. O lembrete e entregue no "
+    "mesmo canal onde foi pedido, marcando quem pediu."
+)
+
 # Sempre anexado ao prompt de sistema, mesmo se SYSTEM_PROMPT for customizado via env var,
 # para que usuarios do Discord nao consigam desativar essas protecoes via env var do bot.
 SAFETY_INSTRUCTIONS = (
@@ -234,6 +250,12 @@ class Config:
 
         self.timezone = os.environ.get("TIMEZONE", "America/Sao_Paulo")
 
+        # Lembretes: quantos cada pessoa pode ter agendados ao mesmo tempo, com que
+        # frequencia o loop confere os vencidos e quao longe no futuro pode agendar.
+        self.max_reminders_per_user = int(os.environ.get("MAX_REMINDERS_PER_USER", "10"))
+        self.reminder_check_seconds = float(os.environ.get("REMINDER_CHECK_SECONDS", "30"))
+        self.max_reminder_days = int(os.environ.get("MAX_REMINDER_DAYS", "365"))
+
         self.default_personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
         self.system_prompt = self.build_system_prompt(DEFAULT_PERSONA_KEY)
 
@@ -244,6 +266,7 @@ class Config:
             + NATURALNESS_INSTRUCTIONS
             + MENTION_INSTRUCTIONS
             + MEMORY_INSTRUCTIONS
+            + REMINDER_INSTRUCTIONS
             + SAFETY_INSTRUCTIONS
         )
         # O contexto dinamico (hora, fatos memorizados, conversa recente do canal) vai

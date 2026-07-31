@@ -9,16 +9,20 @@ A versao original em Node.js foi removida do repositorio.
 app/
   main.py            # cliente discord.py e loop de mensagens
   config.py           # variaveis de ambiente, personas e blocos fixos do prompt
-  db.py               # SQLite (sqlite3 stdlib): historico, fatos e contexto do canal
+  db.py               # SQLite: historico, fatos, contexto do canal e lembretes
   openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
   tools/
-    __init__.py        # definicoes de tools (web_search, fetch_page, remember_fact, forget_fact)
+    __init__.py        # tools: web_search, fetch_page, remember_fact, forget_fact, schedule_reminder
     crw.py              # integracao com fastCRW
   utils/
     image_processor.py  # download/base64 de anexos de imagem
     reply_format.py     # corte limpo e quebra da resposta em varias mensagens
-    clock.py            # data/hora local para o bot saber o dia e o horario
+    clock.py            # data/hora local e interpretacao de horarios de lembrete
 ```
+
+Bancos criados por versoes antigas do bot (memoria por usuario, tabela `messages` sem
+`channel_id`) sao detectados na inicializacao: a tabela antiga e renomeada para
+`messages_legacy_v1` - nada e apagado - e o schema atual e criado do zero.
 
 ## Rodando localmente
 
@@ -113,6 +117,22 @@ Sao duas memorias diferentes:
   rotacao do historico e ao `!reset`; e visivel com `!memoria` e removivel com
   `!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
 
+## Lembretes
+
+Pedidos em linguagem natural no meio da conversa: "me lembra em 20 minutos de tirar o
+bolo", "me avisa amanha as 9 da reuniao". O modelo chama a ferramenta
+`schedule_reminder` e o bot entrega **no mesmo canal onde foi pedido**, marcando quem
+pediu - inclusive em DM, se foi pedido em DM.
+
+Os lembretes ficam no SQLite, nao em memoria, entao sobrevivem a restart do container.
+Se o bot estiver fora do ar na hora marcada, o lembrete e entregue assim que ele volta,
+com um aviso de que esta atrasado. `!reset` **nao** apaga lembretes.
+
+- `!lembretes` lista os seus, com o numero de cada um.
+- `!cancelar <numero>` cancela. Ninguem cancela lembrete de outra pessoa.
+- Limites em `MAX_REMINDERS_PER_USER` e `MAX_REMINDER_DAYS`; a frequencia de
+  verificacao em `REMINDER_CHECK_SECONDS`.
+
 ## Imagens
 
 Mande uma imagem (jpeg/png/gif/webp) junto da mensagem e ela e enviada ao modelo de
@@ -130,6 +150,9 @@ Todos funcionam mencionando o bot no canal, ou direto em DM:
 - `!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
 - `!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
   `!memoria`); `!esquecer tudo` apaga todos, pedindo confirmacao.
-- `!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, hora atual.
+- `!lembretes` - lista seus lembretes agendados.
+- `!cancelar <numero>` - cancela um lembrete (o numero vem do `!lembretes`).
+- `!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, lembretes
+  pendentes, hora atual.
 - `!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao
-  apaga a memoria de longo prazo.
+  apaga a memoria de longo prazo nem os lembretes.

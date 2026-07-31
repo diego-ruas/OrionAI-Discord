@@ -8,6 +8,56 @@ DB_PATH = os.path.join(DATA_DIR, "memory.sqlite")
 
 _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 _conn.execute("PRAGMA journal_mode=WAL")
+
+
+def _migrate_legacy_messages(conn):
+    """Sai da frente de um banco da versao antiga (memoria por usuario, sem canal).
+
+    A tabela `messages` original nao tinha channel_id, e `CREATE TABLE IF NOT EXISTS`
+    nao corrige tabela existente - o schema novo falhava ao criar os indices com um
+    erro seco de "no such column: channel_id" e o bot nem subia. Aqui a tabela antiga
+    e renomeada (nada e apagado, os dados continuam consultaveis) para a nova ser
+    criada limpa. Nao ha como deduzir o canal das linhas antigas, entao elas nao sao
+    convertidas.
+    """
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='messages'"
+    ).fetchone()
+    if not exists:
+        return
+
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "channel_id" in columns:
+        return
+
+    suffix = 1
+    while conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (f"messages_legacy_v{suffix}",),
+    ).fetchone():
+        suffix += 1
+    legacy_name = f"messages_legacy_v{suffix}"
+
+    # Os indices acompanham a tabela renomeada e continuariam ocupando os nomes que o
+    # schema novo usa, fazendo o CREATE INDEX IF NOT EXISTS ser silenciosamente ignorado.
+    for (index_name,) in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='messages' "
+        "AND name LIKE 'idx_messages%'"
+    ).fetchall():
+        conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+
+    conn.execute(f"ALTER TABLE messages RENAME TO {legacy_name}")
+    conn.commit()
+    moved = conn.execute(f"SELECT COUNT(*) FROM {legacy_name}").fetchone()[0]
+    print(
+        f"[db] Banco da versao antiga detectado: tabela 'messages' ({moved} linhas, sem "
+        f"channel_id) preservada como '{legacy_name}'. O historico comeca vazio, a "
+        "memoria agora e por canal."
+    )
+
+
+_migrate_legacy_messages(_conn)
+
 _conn.executescript(
     """
     CREATE TABLE IF NOT EXISTS messages (
@@ -45,6 +95,20 @@ _conn.executescript(
         created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_ambient_channel ON ambient_messages(channel_id, id);
+    -- Lembretes agendados. Ficam no banco (e nao em memoria) para sobreviverem a
+    -- restart do container: o loop de entrega recupera os vencidos ao subir.
+    CREATE TABLE IF NOT EXISTS reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        username TEXT,
+        text TEXT NOT NULL,
+        remind_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        delivered INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(delivered, remind_at);
+    CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, delivered);
     """
 )
 _conn.commit()
@@ -228,3 +292,95 @@ def get_ambient_messages(channel_id, max_messages):
 def clear_ambient_messages(channel_id):
     _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
     _conn.commit()
+
+
+# --- Lembretes ---
+
+
+def count_pending_reminders(user_id):
+    row = _conn.execute(
+        "SELECT COUNT(*) FROM reminders WHERE user_id = ? AND delivered = 0", (user_id,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+def add_reminder(channel_id, user_id, username, text, remind_at):
+    cursor = _conn.execute(
+        "INSERT INTO reminders (channel_id, user_id, username, text, remind_at, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (channel_id, user_id, username, text, remind_at, _now_ms()),
+    )
+    _conn.commit()
+    return cursor.lastrowid
+
+
+def get_due_reminders(now):
+    rows = _conn.execute(
+        "SELECT id, channel_id, user_id, username, text, remind_at FROM reminders "
+        "WHERE delivered = 0 AND remind_at <= ? ORDER BY remind_at",
+        (now,),
+    ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "channel_id": r[1],
+            "user_id": r[2],
+            "username": r[3],
+            "text": r[4],
+            "remind_at": r[5],
+        }
+        for r in rows
+    ]
+
+
+def get_pending_reminders(channel_id=None, user_id=None):
+    """Lembretes ainda nao entregues, filtrando por canal e/ou usuario."""
+    clauses = ["delivered = 0"]
+    params = []
+    if channel_id is not None:
+        clauses.append("channel_id = ?")
+        params.append(channel_id)
+    if user_id is not None:
+        clauses.append("user_id = ?")
+        params.append(user_id)
+
+    rows = _conn.execute(
+        "SELECT id, channel_id, user_id, username, text, remind_at FROM reminders "
+        f"WHERE {' AND '.join(clauses)} ORDER BY remind_at",
+        params,
+    ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "channel_id": r[1],
+            "user_id": r[2],
+            "username": r[3],
+            "text": r[4],
+            "remind_at": r[5],
+        }
+        for r in rows
+    ]
+
+
+def mark_reminder_delivered(reminder_id):
+    _conn.execute("UPDATE reminders SET delivered = 1 WHERE id = ?", (reminder_id,))
+    _conn.commit()
+
+
+def cancel_reminder(reminder_id, user_id):
+    """Cancela um lembrete, mas so se ele for da propria pessoa."""
+    cursor = _conn.execute(
+        "DELETE FROM reminders WHERE id = ? AND user_id = ? AND delivered = 0",
+        (reminder_id, user_id),
+    )
+    _conn.commit()
+    return cursor.rowcount > 0
+
+
+def purge_old_reminders(before):
+    """Limpa lembretes ja entregues e antigos, para a tabela nao crescer para sempre."""
+    cursor = _conn.execute(
+        "DELETE FROM reminders WHERE delivered = 1 AND remind_at < ?", (before,)
+    )
+    _conn.commit()
+    return cursor.rowcount
