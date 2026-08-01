@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+import traceback
 
 import discord
 from discord.ext import tasks
@@ -24,7 +25,12 @@ from .db import (
     purge_old_reminders,
     set_persona,
 )
-from .openrouter import build_image_content, generate_reply, generate_vision_reply
+from .openrouter import (
+    RateLimitError,
+    build_image_content,
+    generate_reply,
+    generate_vision_reply,
+)
 from .utils.clock import describe_timestamp, now_description, now_ms
 from .utils.image_processor import extract_images, has_images
 from .utils.reply_format import split_reply, truncate_reply, typing_delay
@@ -707,11 +713,21 @@ async def on_message(message):
                 )
                 await send_reply(message, reply)
                 _mark_engagement(channel_id, user_id)
-            except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
-                print(f"[bot] Erro ao gerar resposta: {err}")
+            except RateLimitError as err:
+                # Unico caso em que da para afirmar o motivo: o OpenRouter devolveu 429.
+                print(f"[bot] Rate limit em todos os modelos: {err}")
                 await message.reply(
-                    "Desculpa, tive um problema para responder agora (provavelmente limite de "
-                    "uso dos modelos gratuitos). Tenta de novo em instantes."
+                    "Bati no limite de uso dos modelos gratuitos. Tenta de novo em "
+                    "instantes."
+                )
+            except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
+                # Traceback completo no log: sem ele, qualquer falha vira "erro" generico
+                # e nao da para diagnosticar pelo docker logs.
+                print(f"[bot] Erro ao gerar resposta ({type(err).__name__}): {err}")
+                traceback.print_exc()
+                await message.reply(
+                    "Deu erro aqui e nao consegui responder. Se continuar, olha o log "
+                    "do bot que o motivo esta la."
                 )
 
     await with_user_lock(user_id, handle)

@@ -62,6 +62,10 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context):
             message = await _call_model(session, model, messages, use_tools)
 
             tool_calls = message.get("tool_calls")
+            if tool_calls is not None and not isinstance(tool_calls, list):
+                print(f"[openrouter] tool_calls em formato inesperado: {tool_calls!r}")
+                tool_calls = None
+
             if not tool_calls:
                 content = message.get("content")
                 if not (content or "").strip():
@@ -71,26 +75,54 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context):
             messages.append(message)
 
             for call in tool_calls:
-                name = call["function"]["name"]
-                try:
-                    args = json.loads(call["function"].get("arguments") or "{}")
-                    raw_result = await run_tool(name, args, tool_context)
-                    if name in UNTRUSTED_TOOLS:
-                        result = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(content=raw_result)
-                    else:
-                        result = raw_result
-                except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
-                    result = f"Erro ao executar ferramenta: {err}"
+                # Modelos gratuitos as vezes emitem tool_calls fora do formato. Ler os
+                # campos direto (call["id"], call["function"]["name"]) fazia um KeyError
+                # derrubar a resposta inteira; aqui a chamada torta vira um erro que o
+                # modelo consegue ler e contornar.
+                if not isinstance(call, dict):
+                    print(f"[openrouter] tool_call ignorada (nao e objeto): {call!r}")
+                    continue
+
+                call_id = call.get("id")
+                if not call_id:
+                    print(f"[openrouter] tool_call sem id, ignorada: {call!r}")
+                    continue
+
+                function = call.get("function") or {}
+                name = function.get("name")
+
+                if not name:
+                    result = "Erro: chamada de ferramenta sem nome."
+                else:
+                    try:
+                        args = json.loads(function.get("arguments") or "{}")
+                        if not isinstance(args, dict):
+                            raise ValueError("argumentos nao sao um objeto")
+                        raw_result = await run_tool(name, args, tool_context)
+                        if name in UNTRUSTED_TOOLS:
+                            result = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(
+                                content=raw_result
+                            )
+                        else:
+                            result = raw_result
+                    except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
+                        result = f"Erro ao executar ferramenta: {err}"
 
                 messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call["id"],
-                        "content": result,
-                    }
+                    {"role": "tool", "tool_call_id": call_id, "content": result}
                 )
 
-    raise RuntimeError("Numero maximo de chamadas de ferramentas excedido.")
+        # Estourou o limite de idas e vindas de ferramentas. Em vez de falhar, faz uma
+        # ultima chamada sem tools para o modelo ser obrigado a responder em texto.
+        print(
+            f"[openrouter] {model} excedeu {MAX_TOOL_ITERATIONS} rodadas de tools; "
+            "pedindo uma resposta final sem ferramentas."
+        )
+        final = await _call_model(session, model, messages, use_tools=False)
+        content = final.get("content")
+        if not (content or "").strip():
+            raise RuntimeError(f"Modelo {model} nao produziu resposta final")
+        return content
 
 
 def build_image_content(text, images):

@@ -133,6 +133,17 @@ com um aviso de que esta atrasado. `!reset` **nao** apaga lembretes.
 - Limites em `MAX_REMINDERS_PER_USER` e `MAX_REMINDER_DAYS`; a frequencia de
   verificacao em `REMINDER_CHECK_SECONDS`.
 
+## Modelos e falhas
+
+O bot tenta `OPENROUTER_MODEL` e, se ele falhar por qualquer motivo (rate limit, erro
+HTTP, resposta vazia), desce a lista de `OPENROUTER_FALLBACK_MODELS` na ordem. Com
+modelos `:free` isso nao e opcional: um unico 429 sem fallback ja vira "nao consegui
+responder". Todos os modelos da cadeia precisam suportar tool calling, porque as
+ferramentas vao em toda chamada.
+
+Quando algo falha, o log traz o motivo real: `[openrouter] Falha com <modelo>: ...`
+com o status HTTP e o corpo da resposta, e `[bot]` com o traceback completo.
+
 ## Imagens
 
 Mande uma imagem (jpeg/png/gif/webp) junto da mensagem e ela e enviada ao modelo de
