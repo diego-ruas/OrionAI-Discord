@@ -1,7 +1,10 @@
-# Novo Bot Roberto (Python)
+# OrionAI (Python)
 
 Bot de Discord com IA gratuita via OpenRouter e memoria persistente por canal, em Python.
 A versao original em Node.js foi removida do repositorio.
+
+O repositorio ja se chamou `NovoBotRoberto`; os identificadores Docker usam
+`orionai-discord` (minusculo, exigencia do Docker para nome de imagem e projeto).
 
 ## Estrutura
 
@@ -55,7 +58,7 @@ O projeto inclui `Dockerfile` e `docker-compose.yml` prontos para rodar num NAS 
 ### Opcao B - Docker Compose manual (SSH no NAS)
 
 ```bash
-cd /caminho/para/NovoBotRoberto
+cd /caminho/para/OrionAI-Discord
 cp .env.example .env   # edite com suas chaves
 docker compose up -d --build
 ```

@@ -1,10 +1,10 @@
-name: novo-bot-roberto
+name: orionai-discord
 
 services:
-  novo-bot-roberto:
+  orionai-discord:
     build: .
-    image: novo-bot-roberto:latest
-    container_name: novo-bot-roberto
+    image: orionai-discord:latest
+    container_name: orionai-discord
     restart: unless-stopped
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
@@ -51,12 +51,12 @@ services:
         - container: /app/data
           description:
             en_us: Persistent SQLite memory storage
-      main: novo-bot-roberto
+      main: orionai-discord
       description:
         en_us: Discord bot with free AI via OpenRouter and per-user persistent memory
       tagline:
         en_us: Discord AI bot
       title:
-        en_us: Novo Bot Roberto
+        en_us: OrionAI
       category: Utilities
       port_map: ""

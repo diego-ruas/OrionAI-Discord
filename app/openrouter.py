@@ -34,8 +34,8 @@ async def _call_model(session, model, messages, use_tools):
     headers = {
         "Authorization": f"Bearer {config.openrouter_api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/discord-bot",
-        "X-Title": "NovoBotRoberto",
+        "HTTP-Referer": "https://github.com/diego-ruas/OrionAI-Discord",
+        "X-Title": "OrionAI-Discord",
     }
 
     async with session.post(API_URL, json=payload, headers=headers) as res:
