@@ -211,6 +211,15 @@ class Config:
         self.typing_chars_per_second = float(os.environ.get("TYPING_CHARS_PER_SECOND", "28"))
         self.max_typing_delay_seconds = float(os.environ.get("MAX_TYPING_DELAY_SECONDS", "5"))
 
+        # Cargos que, alem de administrador/gerenciar servidor/gerenciar mensagens,
+        # podem apagar dados do bot. Nome ou id, separados por virgula. Ver
+        # app/permissions.py.
+        self.admin_roles = [
+            r.strip().lower()
+            for r in os.environ.get("ADMIN_ROLES", "").split(",")
+            if r.strip()
+        ]
+
         # Nomes que acordam o bot num canal sem precisar de @ (separados por virgula).
         self.bot_names = [
             n.strip().lower()

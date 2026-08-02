@@ -148,6 +148,23 @@ Nao da para fazer Rich Presence completo: o Discord aceita de bots apenas tipo, 
 state - imagem, botao e party sao ignorados, porque dependem do RPC usado por
 aplicativos de desktop.
 
+## Quem pode apagar
+
+Apagar dados de um canal (`o!reset` e `o!esquecer`) e restrito a quem tem permissao de
+**administrador**, **gerenciar servidor** ou **gerenciar mensagens** - mais o dono do
+servidor e quem tiver um cargo listado em `ADMIN_ROLES` (nome ou id).
+
+Ler continua livre: `o!memoria`, `o!lembretes`, `o!status`, os botoes do embed,
+conversar e agendar lembrete valem para todo mundo. Cancelar lembrete tambem, mas so
+o proprio.
+
+A ferramenta `forget_fact` obedece a mesma regra. Sem isso a restricao seria
+decorativa: bastaria pedir "esquece tudo o que voce sabe" na conversa para o modelo
+apagar a memoria do canal sem passar por comando nenhum.
+
+Em DM a restricao nao se aplica - nao ha hierarquia ali, e o historico e da propria
+pessoa; bloquear trancaria alguem para fora dos proprios dados.
+
 ## Memoria
 
 Sao duas memorias diferentes:

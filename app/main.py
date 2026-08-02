@@ -32,6 +32,7 @@ from .openrouter import (
     generate_reply,
     generate_vision_reply,
 )
+from .permissions import can_manage, denial_message
 from .utils import ocr, presence
 from .utils.clock import describe_timestamp, now_description, now_ms
 from .utils.image_processor import extract_images, has_images
@@ -406,6 +407,10 @@ async def handle_memory_command(message, channel_id):
 
 
 async def handle_forget_command(message, channel_id, text):
+    if not can_manage(message.author, message.channel):
+        await message.reply(denial_message())
+        return
+
     parts = text.split(maxsplit=1)
     argument = parts[1].strip().lower() if len(parts) > 1 else ""
     prefix = config.command_prefix
@@ -576,6 +581,9 @@ async def handle_command(message, channel_id, text):
     if command in ("ajuda", "help"):
         await handle_help_command(message)
     elif command == "reset":
+        if not can_manage(message.author, message.channel):
+            await message.reply(denial_message())
+            return True
         confirmed = await ask_confirmation(
             message, "Tem certeza que quer apagar a memoria deste canal?"
         )
@@ -1006,6 +1014,7 @@ async def on_message(message):
                 "channel_id": channel_id,
                 "user_id": str(user_id),
                 "username": message.author.name,
+                "can_manage": can_manage(message.author, message.channel),
             }
 
             try:

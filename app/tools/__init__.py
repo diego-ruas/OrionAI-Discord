@@ -220,6 +220,13 @@ async def run_tool(name, args, context=None):
         channel_id = context.get("channel_id")
         if not channel_id:
             raise RuntimeError("Sem canal para esquecer o fato.")
+        # Sem isso a restricao dos comandos seria decorativa: bastaria pedir "esquece
+        # tudo o que voce sabe" na conversa para o modelo apagar a memoria do canal.
+        if not context.get("can_manage", True):
+            return (
+                "Nao apaguei: apagar a memoria do canal e restrito a quem modera. "
+                "Diga isso a pessoa e siga a conversa normalmente."
+            )
         removed = forget_facts(channel_id, args.get("query"))
         if removed:
             return f"{removed} fato(s) esquecido(s)."
