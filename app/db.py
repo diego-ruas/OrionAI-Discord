@@ -71,10 +71,6 @@ _conn.executescript(
     );
     CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
     CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, id);
-    CREATE TABLE IF NOT EXISTS channel_settings (
-        channel_id TEXT PRIMARY KEY,
-        persona TEXT NOT NULL
-    );
     -- Memoria de longo prazo: fatos que sobrevivem a rotacao do historico e ao reset
     -- de mensagens. Escritos pelo modelo via ferramenta remember_fact.
     CREATE TABLE IF NOT EXISTS facts (
@@ -170,22 +166,6 @@ def count_messages(channel_id):
 def clear_history(channel_id):
     _conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,))
     _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
-    _conn.commit()
-
-
-def get_persona(channel_id):
-    row = _conn.execute(
-        "SELECT persona FROM channel_settings WHERE channel_id = ?", (channel_id,)
-    ).fetchone()
-    return row[0] if row else None
-
-
-def set_persona(channel_id, persona_key):
-    _conn.execute(
-        "INSERT INTO channel_settings (channel_id, persona) VALUES (?, ?) "
-        "ON CONFLICT(channel_id) DO UPDATE SET persona = excluded.persona",
-        (channel_id, persona_key),
-    )
     _conn.commit()
 
 

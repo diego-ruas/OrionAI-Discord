@@ -6,7 +6,7 @@ import traceback
 import discord
 from discord.ext import tasks
 
-from .config import PERSONA_DESCRIPTIONS, PERSONA_PRESETS, config
+from .config import config
 from .db import (
     add_ambient_message,
     add_message,
@@ -20,12 +20,10 @@ from .db import (
     get_facts,
     get_history,
     get_pending_reminders,
-    get_persona,
     is_muted,
     mark_reminder_delivered,
     purge_old_reminders,
     set_muted,
-    set_persona,
 )
 from .openrouter import (
     RateLimitError,
@@ -262,7 +260,6 @@ def _help_sections():
         ("Lembretes", HELP_REMINDERS),
         (
             "Conversa",
-            f"`{p}modo` - ver o modo atual e as opcoes; `{p}modo <nome>` troca\n"
             f"`{p}parar` - encerrar a conversa na hora (em DM fico calado ate voce me "
             f"chamar pelo nome ou mandar um comando)\n"
             f"`{p}reset` - apagar o historico de conversa deste canal",
@@ -277,7 +274,7 @@ def _help_sections():
             f"`{p}lembretes` - ver os seus\n"
             f"`{p}cancelar <numero>` - cancelar um deles",
         ),
-        ("Diagnostico", f"`{p}status` - modelos, modo, memoria e lembretes pendentes"),
+        ("Diagnostico", f"`{p}status` - modelos, memoria e lembretes pendentes"),
     ]
 
 
@@ -312,9 +309,70 @@ def build_help_embed():
     return embed
 
 
+class HelpView(discord.ui.View):
+    """Botoes do embed de ajuda.
+
+    timeout=None e custom_id fixo fazem a view ser persistente: registrada no on_ready
+    com client.add_view, os botoes de embeds antigos continuam funcionando depois de um
+    restart do container, em vez de morrerem calados.
+
+    Toda resposta e ephemeral - so quem clicou ve. Sao dados pessoais (memoria do canal,
+    lembretes de quem clicou) e nao ha por que poluir o canal com eles.
+    """
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Memoria", emoji="🧠", style=discord.ButtonStyle.secondary,
+        custom_id="orion:help:memoria",
+    )
+    async def memoria(self, interaction, button):
+        await interaction.response.send_message(
+            build_memory_text(str(interaction.channel_id)), ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="Lembretes", emoji="⏰", style=discord.ButtonStyle.secondary,
+        custom_id="orion:help:lembretes",
+    )
+    async def lembretes(self, interaction, button):
+        await interaction.response.send_message(
+            build_reminders_text(str(interaction.channel_id), interaction.user.id),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="Status", emoji="📊", style=discord.ButtonStyle.secondary,
+        custom_id="orion:help:status",
+    )
+    async def status(self, interaction, button):
+        await interaction.response.send_message(
+            build_status_text(str(interaction.channel_id), interaction.user.id),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="Parar", emoji="🤫", style=discord.ButtonStyle.danger,
+        custom_id="orion:help:parar",
+    )
+    async def parar(self, interaction, button):
+        channel_id = str(interaction.channel_id)
+        if isinstance(interaction.channel, discord.DMChannel):
+            set_muted(channel_id, True)
+            texto = (
+                "Ok, fico quieto. Me chama pelo nome ou manda qualquer comando "
+                f"`{config.command_prefix}...` quando quiser retomar."
+            )
+        else:
+            _clear_engagement(channel_id, interaction.user.id)
+            texto = "Ok, paro por aqui. Me marca com @ quando precisar."
+        await interaction.response.send_message(texto, ephemeral=True)
+
+
 async def handle_help_command(message):
     try:
-        await message.reply(embed=build_help_embed())
+        await message.reply(embed=build_help_embed(), view=HelpView())
     except (discord.Forbidden, discord.HTTPException) as err:
         # Mandar embed exige a permissao "Incorporar links" no canal; sem ela o envio
         # falha mas texto puro ainda passa.
@@ -322,42 +380,14 @@ async def handle_help_command(message):
         await message.reply(build_help_text())
 
 
-async def handle_mode_command(message, channel_id, text):
-    parts = text.split(maxsplit=1)
-    requested = parts[1].strip().lower() if len(parts) > 1 else ""
-
-    if not requested:
-        current = get_persona(channel_id) or "padrao"
-        options = "\n".join(
-            f"- `{key}` - {PERSONA_DESCRIPTIONS.get(key, '')}" for key in PERSONA_PRESETS
-        )
-        await message.reply(
-            f"Modo atual: **{current}**.\n{options}\n\n"
-            f"Use `{config.command_prefix}modo <nome>` para trocar."
-        )
-        return
-
-    if requested not in PERSONA_PRESETS:
-        options = ", ".join(PERSONA_PRESETS.keys())
-        await message.reply(f"Modo '{requested}' nao existe. Opcoes: {options}.")
-        return
-
-    confirmed = await ask_confirmation(
-        message, f"Confirma trocar o modo deste canal para **{requested}**?"
-    )
-    if confirmed:
-        set_persona(channel_id, requested)
-        await message.channel.send(f"Modo alterado para **{requested}**.")
-
-
-async def handle_memory_command(message, channel_id):
+def build_memory_text(channel_id):
+    """Texto da memoria, usado tanto pelo comando quanto pelo botao do embed."""
     facts = get_facts(channel_id)
     if not facts:
-        await message.reply(
+        return (
             "Nao tenho nada memorizado deste canal ainda. Vou guardando o que aparecer "
             "de relevante conforme a gente conversa."
         )
-        return
 
     lines = []
     for index, fact in enumerate(facts, start=1):
@@ -365,11 +395,14 @@ async def handle_memory_command(message, channel_id):
         lines.append(f"{index}. {subject}{fact['fact']}")
 
     body = "\n".join(lines)
-    reply = (
+    return (
         f"O que eu lembro deste canal:\n{body}\n\n"
         f"-# Use `{config.command_prefix}esquecer <numero>` para apagar um item."
-    )
-    await message.reply(reply[:2000])
+    )[:2000]
+
+
+async def handle_memory_command(message, channel_id):
+    await message.reply(build_memory_text(channel_id))
 
 
 async def handle_forget_command(message, channel_id, text):
@@ -427,14 +460,14 @@ async def handle_stop_command(message, channel_id):
     await message.reply("Ok, paro por aqui. Me marca com @ quando precisar.")
 
 
-async def handle_reminders_command(message, channel_id):
-    reminders = get_pending_reminders(user_id=str(message.author.id))
+def build_reminders_text(channel_id, user_id):
+    """Texto dos lembretes de uma pessoa, usado pelo comando e pelo botao."""
+    reminders = get_pending_reminders(user_id=str(user_id))
     if not reminders:
-        await message.reply(
+        return (
             "Voce nao tem lembretes agendados. Pode me pedir na conversa mesmo, tipo "
             "\"me lembra em 20 minutos de tirar o bolo do forno\"."
         )
-        return
 
     lines = []
     for index, reminder in enumerate(reminders, start=1):
@@ -443,11 +476,14 @@ async def handle_reminders_command(message, channel_id):
         lines.append(f"{index}. **{when}**{where} - {reminder['text']}")
 
     body = "\n".join(lines)
-    reply = (
+    return (
         f"Seus lembretes:\n{body}\n\n"
         f"-# Use `{config.command_prefix}cancelar <numero>` para cancelar um deles."
-    )
-    await message.reply(reply[:2000])
+    )[:2000]
+
+
+async def handle_reminders_command(message, channel_id):
+    await message.reply(build_reminders_text(channel_id, message.author.id))
 
 
 async def handle_cancel_command(message, text):
@@ -477,23 +513,25 @@ async def handle_cancel_command(message, text):
         await message.reply("Esse lembrete ja nao estava mais pendente.")
 
 
-async def handle_status_command(message, channel_id):
-    persona = get_persona(channel_id) or "padrao"
+def build_status_text(channel_id, user_id):
     fact_count = len(get_facts(channel_id))
     stored = count_messages(channel_id)
     ambient = len(get_ambient_messages(channel_id, config.ambient_context_messages))
 
-    await message.reply(
-        f"Modo: **{persona}** ({PERSONA_DESCRIPTIONS.get(persona, '')})\n"
+    pendentes = len(get_pending_reminders(user_id=str(user_id)))
+    return (
         f"Modelo de texto: `{config.model}`\n"
         f"Modelo de imagem: `{config.vision_model}`\n"
         f"Historico deste canal: {stored}/{config.memory_max_messages} mensagens\n"
         f"Memoria de longo prazo: {fact_count}/{config.max_facts_per_channel} itens\n"
         f"Contexto do canal captado: {ambient} mensagens\n"
-        f"Seus lembretes pendentes: {len(get_pending_reminders(user_id=str(message.author.id)))}"
-        f"/{config.max_reminders_per_user}\n"
+        f"Seus lembretes pendentes: {pendentes}/{config.max_reminders_per_user}\n"
         f"Agora: {now_description(config.timezone)}"
     )
+
+
+async def handle_status_command(message, channel_id):
+    await message.reply(build_status_text(channel_id, message.author.id))
 
 
 # Nomes dos comandos sem o prefixo: ele e configuravel (config.command_prefix), entao
@@ -502,7 +540,6 @@ COMMAND_NAMES = (
     "ajuda",
     "help",
     "reset",
-    "modo",
     "memoria",
     "esquecer",
     "status",
@@ -548,8 +585,6 @@ async def handle_command(message, channel_id, text):
                 "Historico apagado. O que eu tinha memorizado a longo prazo continua "
                 f"ai - use `{prefix}esquecer tudo` se quiser limpar isso tambem."
             )
-    elif command == "modo":
-        await handle_mode_command(message, channel_id, text)
     elif command == "memoria":
         await handle_memory_command(message, channel_id)
     elif command == "esquecer":
@@ -829,9 +864,20 @@ async def _before_presence_loop():
 # --- Eventos ---
 
 
+_views_registered = False
+
+
 @client.event
 async def on_ready():
+    global _views_registered
+
     print(f"Bot conectado como {client.user}")
+
+    # Registra a view persistente uma vez: sem isso, os botoes de embeds enviados antes
+    # do restart param de responder.
+    if not _views_registered:
+        client.add_view(HelpView())
+        _views_registered = True
 
     if _presence_entries and not presence_loop.is_running():
         presence_loop.change_interval(seconds=config.presence_rotate_seconds)
@@ -919,9 +965,8 @@ async def on_message(message):
                     print(f"[visao] Falha ao descrever imagem: {err}")
 
             history = format_history(get_history(channel_id, config.memory_max_messages))
-            persona_key = get_persona(channel_id) or "padrao"
             system_prompt = config.build_system_prompt(
-                persona_key, build_dynamic_context(message, channel_id)
+                build_dynamic_context(message, channel_id)
             )
             current_content = build_current_content(message, text, replied_to, image_names)
             if ocr_blocks:

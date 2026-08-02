@@ -11,7 +11,7 @@ O repositorio ja se chamou `NovoBotRoberto`; os identificadores Docker usam
 ```
 app/
   main.py            # cliente discord.py e loop de mensagens
-  config.py           # variaveis de ambiente, personas e blocos fixos do prompt
+  config.py           # variaveis de ambiente e blocos fixos do prompt
   db.py               # SQLite: historico, fatos, contexto do canal e lembretes
   openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
   tools/
@@ -102,6 +102,14 @@ Para encerrar antes da janela expirar, use `o!parar` (ou `o!tchau`):
 As demais mensagens do canal nao geram resposta, mas as ultimas
 `AMBIENT_CONTEXT_MESSAGES` ficam guardadas como contexto ("do que estavam falando")
 para quando ele for chamado. Coloque `AMBIENT_CONTEXT_MESSAGES=0` para desligar isso.
+
+## Tom
+
+O bot trabalha sempre em registro serio e profissional, e isso nao e configuravel por
+quem usa: nao ha comando de modo/persona. A regra de tom e um bloco fixo anexado
+depois do `SYSTEM_PROMPT`, entao prevalece sobre o que estiver na env var e sobre
+pedidos no chat ("seja engracado", "age como se fosse X"). Sem piada, ironia, emoji,
+gíria nem imitacao de personagem - cordial e prestativo, mas sem humor.
 
 ## Conversa natural
 
@@ -249,10 +257,8 @@ Comando com o prefixo ja e um endereco direto ao bot: funciona solto no canal, s
 precisar de `@`, e tambem em DM. Vale so para comando existente - `o!naoexiste` nao
 acorda o bot.
 
-- `o!ajuda` - lista os comandos e as formas de chamar o bot.
-- `o!modo` - mostra o modo atual e as opcoes; `o!modo <nome>` troca (pede confirmacao
-  por reacao). Modos: `padrao`, `realista`, `casual`, `sarcastico`, `professor`,
-  `direto`. A escolha e por canal e fica salva no banco.
+- `o!ajuda` - embed com os comandos e botoes de Memoria, Lembretes, Status e
+  Parar. Clicar responde so para quem clicou (ephemeral), sem digitar comando.
 - `o!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
 - `o!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
   `o!memoria`); `o!esquecer tudo` apaga todos, pedindo confirmacao.
