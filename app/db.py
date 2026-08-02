@@ -109,6 +109,13 @@ _conn.executescript(
     );
     CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(delivered, remind_at);
     CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, delivered);
+    -- Canais em que o bot foi mandado calar a boca com !parar. So usado em DM, onde
+    -- ele responderia tudo por padrao; em canal de servidor o !parar apenas encerra a
+    -- janela de follow-up, sem silenciar o bot para os outros.
+    CREATE TABLE IF NOT EXISTS muted_channels (
+        channel_id TEXT PRIMARY KEY,
+        muted_at INTEGER NOT NULL
+    );
     """
 )
 _conn.commit()
@@ -292,6 +299,28 @@ def get_ambient_messages(channel_id, max_messages):
 def clear_ambient_messages(channel_id):
     _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
     _conn.commit()
+
+
+# --- Modo silencioso ---
+
+
+def set_muted(channel_id, muted):
+    if muted:
+        _conn.execute(
+            "INSERT INTO muted_channels (channel_id, muted_at) VALUES (?, ?) "
+            "ON CONFLICT(channel_id) DO UPDATE SET muted_at = excluded.muted_at",
+            (channel_id, _now_ms()),
+        )
+    else:
+        _conn.execute("DELETE FROM muted_channels WHERE channel_id = ?", (channel_id,))
+    _conn.commit()
+
+
+def is_muted(channel_id):
+    row = _conn.execute(
+        "SELECT 1 FROM muted_channels WHERE channel_id = ?", (channel_id,)
+    ).fetchone()
+    return row is not None
 
 
 # --- Lembretes ---

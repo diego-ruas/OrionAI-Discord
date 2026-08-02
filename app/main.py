@@ -21,8 +21,10 @@ from .db import (
     get_history,
     get_pending_reminders,
     get_persona,
+    is_muted,
     mark_reminder_delivered,
     purge_old_reminders,
+    set_muted,
     set_persona,
 )
 from .openrouter import (
@@ -73,6 +75,11 @@ def _mark_engagement(channel_id, user_id):
     _last_engagement[(channel_id, user_id)] = now
 
 
+def _clear_engagement(channel_id, user_id):
+    """Encerra a janela de follow-up na hora (comando !parar)."""
+    _last_engagement.pop((channel_id, user_id), None)
+
+
 def _in_followup_window(channel_id, user_id):
     if config.followup_window_seconds <= 0:
         return False
@@ -87,6 +94,20 @@ def _mentions_bot_by_name(content):
     return any(
         re.search(rf"\b{re.escape(name)}\b", lowered) for name in config.bot_names
     )
+
+
+def _looks_like_command(content):
+    first = content.strip().lower().split(maxsplit=1)
+    return bool(first) and first[0] in COMMANDS
+
+
+def _breaks_silence(content):
+    """O que tira o bot do modo silencioso: chamar pelo nome ou mandar um comando.
+
+    Precisa ser algo que funcione mesmo com ele calado, senao o !parar em DM viraria
+    uma porta sem maçaneta do lado de dentro.
+    """
+    return _mentions_bot_by_name(content) or _looks_like_command(content)
 
 
 async def _resolve_reference(message, allow_fetch):
@@ -120,6 +141,9 @@ def should_respond(message, replied_to):
     if message.author.bot:
         return False
     if isinstance(message.channel, discord.DMChannel):
+        # Em DM ele responderia tudo; o !parar e a unica forma de conseguir silencio.
+        if is_muted(str(message.channel.id)):
+            return _breaks_silence(message.content)
         return True
     if client.user in message.mentions:
         return True
@@ -227,6 +251,8 @@ HELP_TEXT = (
     "`!esquecer <numero>` - apagar um item da memoria (`!esquecer tudo` apaga todos)\n"
     "`!lembretes` - ver seus lembretes agendados\n"
     "`!cancelar <numero>` - cancelar um lembrete\n"
+    "`!parar` - encerrar a conversa na hora (em DM, fico calado ate voce me chamar "
+    "pelo nome ou mandar um comando)\n"
     "`!status` - modelo, modo e tamanho da memoria deste canal\n"
     "`!reset` - apagar o historico de conversa deste canal"
 )
@@ -321,6 +347,21 @@ async def handle_forget_command(message, channel_id, text):
         await message.reply(f"Esqueci: {target['fact']}")
 
 
+async def handle_stop_command(message, channel_id):
+    if isinstance(message.channel, discord.DMChannel):
+        set_muted(channel_id, True)
+        await message.reply(
+            "Ok, fico quieto. Me chama pelo nome ou manda qualquer `!comando` quando "
+            "quiser retomar."
+        )
+        return
+
+    # Em canal, silenciar valeria para todo mundo - um !parar de alguem calaria o bot
+    # para os outros. Aqui ele so encerra a conversa em andamento com quem pediu.
+    _clear_engagement(channel_id, message.author.id)
+    await message.reply("Ok, paro por aqui. Me marca com @ quando precisar.")
+
+
 async def handle_reminders_command(message, channel_id):
     reminders = get_pending_reminders(user_id=str(message.author.id))
     if not reminders:
@@ -398,6 +439,8 @@ COMMANDS = (
     "!status",
     "!lembretes",
     "!cancelar",
+    "!parar",
+    "!tchau",
 )
 
 
@@ -433,6 +476,8 @@ async def handle_command(message, channel_id, text):
         await handle_reminders_command(message, channel_id)
     elif command == "!cancelar":
         await handle_cancel_command(message, text)
+    elif command in ("!parar", "!tchau"):
+        await handle_stop_command(message, channel_id)
 
     return True
 
@@ -640,6 +685,12 @@ async def on_message(message):
 
     user_id = message.author.id
     text = strip_mention(message.content)
+
+    # Chegou aqui em DM estando silenciado quer dizer que a pessoa chamou pelo nome ou
+    # mandou um comando: sai do silencio. Vem antes de handle_command de proposito, para
+    # um !parar seguido de outro !parar continuar silenciando.
+    if isinstance(message.channel, discord.DMChannel) and is_muted(channel_id):
+        set_muted(channel_id, False)
 
     if await handle_command(message, channel_id, text):
         return

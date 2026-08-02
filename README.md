@@ -84,9 +84,19 @@ O bot responde quando:
 - e chamado pelo nome no meio da frase (configuravel em `BOT_NAMES`);
 - recebe DM;
 - a pessoa continua falando com ele logo depois de ter sido respondida, dentro da
-  janela de `FOLLOWUP_WINDOW_SECONDS` - sem precisar de `@` em cada mensagem. Se a
-  pessoa mencionar ou responder outra pessoa nesse meio tempo, o bot entende que a
-  conversa nao e com ele e fica calado.
+  janela de `FOLLOWUP_WINDOW_SECONDS` (15s por padrao) - sem precisar de `@` em cada
+  mensagem. O relogio reinicia a cada resposta dele, entao e tempo de silencio, nao
+  duracao total da conversa. Se a pessoa mencionar ou responder outra pessoa nesse
+  meio tempo, o bot entende que a conversa nao e com ele e fica calado.
+
+Para encerrar antes da janela expirar, use `!parar` (ou `!tchau`):
+
+- **em canal**: encerra a conversa em andamento so de quem pediu, e o bot volta a
+  exigir `@`. Nao silencia o bot para as outras pessoas do canal.
+- **em DM**: como ali ele responderia toda mensagem, o `!parar` liga um modo
+  silencioso de verdade, guardado no banco (sobrevive a restart). Ele so volta a
+  falar quando voce chamar pelo nome ou mandar qualquer `!comando` - as duas coisas
+  que continuam funcionando com ele calado.
 
 As demais mensagens do canal nao geram resposta, mas as ultimas
 `AMBIENT_CONTEXT_MESSAGES` ficam guardadas como contexto ("do que estavam falando")
@@ -166,6 +176,8 @@ Todos funcionam mencionando o bot no canal, ou direto em DM:
   `!memoria`); `!esquecer tudo` apaga todos, pedindo confirmacao.
 - `!lembretes` - lista seus lembretes agendados.
 - `!cancelar <numero>` - cancela um lembrete (o numero vem do `!lembretes`).
+- `!parar` (ou `!tchau`) - encerra a conversa na hora; em DM, silencia ate voce
+  chamar pelo nome ou mandar um comando.
 - `!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, lembretes
   pendentes, hora atual.
 - `!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao

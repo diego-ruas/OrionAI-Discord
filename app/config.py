@@ -246,7 +246,7 @@ class Config:
 
         # Depois de responder alguem, o bot continua a conversa com essa mesma pessoa
         # sem exigir @ novamente, por esse tempo. 0 desliga.
-        self.followup_window_seconds = float(os.environ.get("FOLLOWUP_WINDOW_SECONDS", "120"))
+        self.followup_window_seconds = float(os.environ.get("FOLLOWUP_WINDOW_SECONDS", "15"))
 
         self.timezone = os.environ.get("TIMEZONE", "America/Sao_Paulo")
 
