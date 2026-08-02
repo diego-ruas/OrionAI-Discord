@@ -82,6 +82,7 @@ O bot responde quando:
 - e mencionado com `@`;
 - alguem responde (reply) uma mensagem dele;
 - e chamado pelo nome no meio da frase (configuravel em `BOT_NAMES`);
+- recebe um comando com o prefixo (`o!ajuda` solto ja basta, sem `@`);
 - recebe DM;
 - a pessoa continua falando com ele logo depois de ter sido respondida, dentro da
   janela de `FOLLOWUP_WINDOW_SECONDS` (15s por padrao) - sem precisar de `@` em cada
@@ -244,7 +245,9 @@ maquina com GPU e aponte o bot para ela pela rede - nao no proprio NAS.
 
 ## Comandos do bot
 
-Todos funcionam mencionando o bot no canal, ou direto em DM:
+Comando com o prefixo ja e um endereco direto ao bot: funciona solto no canal, sem
+precisar de `@`, e tambem em DM. Vale so para comando existente - `o!naoexiste` nao
+acorda o bot.
 
 - `o!ajuda` - lista os comandos e as formas de chamar o bot.
 - `o!modo` - mostra o modo atual e as opcoes; `o!modo <nome>` troca (pede confirmacao

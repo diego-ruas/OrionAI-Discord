@@ -135,9 +135,9 @@ def should_respond(message, replied_to):
     """Decide se o bot entra na conversa.
 
     Alem de @ e DM, o bot responde quando alguem responde uma mensagem dele, quando
-    chamam pelo nome, e quando a pessoa continua falando com ele logo depois de ter
-    sido respondida - do jeito que uma conversa de verdade funciona, sem @ em toda
-    mensagem.
+    chamam pelo nome, quando mandam um comando com o prefixo, e quando a pessoa
+    continua falando com ele logo depois de ter sido respondida - do jeito que uma
+    conversa de verdade funciona, sem @ em toda mensagem.
     """
     if message.author.bot:
         return False
@@ -147,6 +147,10 @@ def should_respond(message, replied_to):
             return _breaks_silence(message.content)
         return True
     if client.user in message.mentions:
+        return True
+    # Um comando com o prefixo ja e um endereco explicito ao bot - exigir @ junto
+    # anularia o proposito de existir um prefixo.
+    if _looks_like_command(message.content):
         return True
     if replied_to and replied_to.author.id == client.user.id:
         return True
@@ -239,8 +243,9 @@ async def send_reply(message, text):
 
 HELP_INTRO = (
     "Me marque com @, responda uma mensagem minha, me chame pelo nome ou me manda DM. "
-    "Depois de eu responder, voce pode continuar falando por alguns instantes sem "
-    "precisar me marcar de novo. Se mandar uma imagem junto, eu olho a imagem."
+    "Comando com prefixo funciona solto, sem precisar me marcar. Depois de eu "
+    "responder, voce pode continuar falando por alguns instantes sem me marcar de "
+    "novo. Se mandar uma imagem junto, eu olho a imagem."
 )
 
 HELP_REMINDERS = (
