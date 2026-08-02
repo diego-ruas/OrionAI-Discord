@@ -720,6 +720,16 @@ def rescue_reminder(text, tool_context):
     return None
 
 
+# Rodapes que so o codigo pode escrever. Se aparecerem no texto do modelo, e porque ele
+# copiou de uma resposta anterior - o que ja fez o bot exibir "nao consegui agendar" e
+# "lembrete salvo" na mesma mensagem.
+_RODAPE_DO_CODIGO = re.compile(r"^\s*-#\s*(⏰|⚠️).*$", re.MULTILINE)
+
+
+def strip_code_footers(texto):
+    return _RODAPE_DO_CODIGO.sub("", texto or "").rstrip()
+
+
 def format_reminder_footer(created):
     """Confirmacao escrita pelo codigo, a partir do que foi mesmo gravado."""
     if len(created) == 1:
@@ -1085,6 +1095,9 @@ async def on_message(message):
                 else:
                     reply = await generate_reply(messages, tool_context)
 
+                # O modelo as vezes reproduz rodapes que viu no historico. Eles sao do
+                # codigo, entao qualquer copia sai antes de decidir o que anexar.
+                reply = strip_code_footers(reply)
                 reply = truncate_reply(reply, config.max_reply_chars)
 
                 # Confirmacao e desmentido escritos pelo codigo, com base no que existe
@@ -1096,11 +1109,14 @@ async def on_message(message):
                     if rescue_reminder(text, tool_context):
                         criados = tool_context.get("created_reminders") or []
 
+                # O rodape e enfeite de interface: vai para o Discord, mas nao para o
+                # historico. Gravado, o modelo o copiaria na resposta seguinte.
+                enviado = reply
                 if criados:
-                    reply += format_reminder_footer(criados)
+                    enviado += format_reminder_footer(criados)
                 elif reminder_promise_broken(text, reply, criados):
                     print(f"[lembretes] Promessa sem agendamento de {message.author.name}")
-                    reply += (
+                    enviado += (
                         "\n-# ⚠️ Nao consegui agendar de verdade. Tenta de novo dizendo "
                         f"o horario de forma bem direta, ou use `{config.command_prefix}"
                         "lembretes` para conferir."
@@ -1128,7 +1144,7 @@ async def on_message(message):
                     reply,
                     config.memory_max_messages,
                 )
-                await send_reply(message, reply)
+                await send_reply(message, enviado)
                 _mark_engagement(channel_id, user_id)
             except RateLimitError as err:
                 # Unico caso em que da para afirmar o motivo: o OpenRouter devolveu 429.
