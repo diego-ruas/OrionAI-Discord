@@ -212,8 +212,14 @@ class Config:
         self.openrouter_api_key = _required("OPENROUTER_API_KEY")
         self.crw_api_key = os.environ.get("CRW_API_KEY", "")
         self.model = os.environ.get("OPENROUTER_MODEL", "tencent/hy3:free")
-        self.vision_model = os.environ.get(
-            "OPENROUTER_VISION_MODEL", "google/gemma-4-26b-a4b-it:free"
+        # VISION_MODEL e o nome atual: desde que a visao pode apontar para outro
+        # provedor (VISION_API_BASE), chamar isso de "OPENROUTER_..." confundia - o
+        # valor tem que ser o id do modelo no endpoint escolhido, seja OpenRouter,
+        # Gemini ou Ollama. O nome antigo continua funcionando.
+        self.vision_model = (
+            os.environ.get("VISION_MODEL")
+            or os.environ.get("OPENROUTER_VISION_MODEL")
+            or "nvidia/nemotron-nano-12b-v2-vl:free"
         )
         self.fallback_models = [
             m.strip()

@@ -196,7 +196,7 @@ servidor compativel com a API da OpenAI:
 
 ```bash
 VISION_API_BASE=http://192.168.0.10:11434/v1   # Ollama, LM Studio, llama.cpp
-OPENROUTER_VISION_MODEL=moondream
+VISION_MODEL=moondream
 ```
 
 ### Usando o Gemini so para as imagens
@@ -207,7 +207,7 @@ OpenRouter:
 ```bash
 VISION_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
 VISION_API_KEY=sua_chave_do_gemini
-OPENROUTER_VISION_MODEL=gemini-2.5-flash
+VISION_MODEL=gemini-3.5-flash-lite
 ```
 
 Sobre o custo: o Gemini cobra 258 tokens quando os dois lados da imagem tem no maximo
