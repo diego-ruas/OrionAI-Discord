@@ -220,6 +220,29 @@ class Config:
             for m in os.environ.get("OPENROUTER_FALLBACK_MODELS", "").split(",")
             if m.strip()
         ]
+        # Para onde vao as chamadas de visao. Por padrao o proprio OpenRouter, mas
+        # apontando para um servidor compativel com a API da OpenAI (Ollama, LM Studio,
+        # llama.cpp) a imagem passa a ser processada por um modelo local. Ex.:
+        # VISION_API_BASE=http://192.168.0.10:11434/v1  VISION_MODEL=moondream
+        self.vision_api_base = os.environ.get("VISION_API_BASE", "").strip().rstrip("/")
+        self.vision_api_key = os.environ.get("VISION_API_KEY", "").strip()
+
+        # Antes de enviar, a imagem e reduzida a esse lado maior e recomprimida em JPEG.
+        # 0 desliga o redimensionamento.
+        self.vision_max_image_px = int(os.environ.get("VISION_MAX_IMAGE_PX", "1024"))
+        self.vision_jpeg_quality = int(os.environ.get("VISION_JPEG_QUALITY", "85"))
+
+        # OCR local (Tesseract): le o texto da imagem sem mandar nada para fora.
+        self.ocr_enabled = _flag("OCR_ENABLED", True)
+        self.ocr_langs = os.environ.get("OCR_LANGS", "por+eng")
+        self.ocr_min_chars = int(os.environ.get("OCR_MIN_CHARS", "24"))
+        # Com texto suficiente lido localmente, responder so com esse texto e nao mandar
+        # a imagem para a nuvem. Desligue para sempre usar o modelo de visao.
+        self.ocr_skips_vision = _flag("OCR_SKIPS_VISION", True)
+        # Ultimo recurso quando o OCR nao resolve: usar o modelo de visao. Com False, o
+        # bot nunca envia imagem para fora - responde com o que o OCR conseguiu ler.
+        self.vision_enabled = _flag("VISION_ENABLED", True)
+
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
         self.max_reply_chars = int(os.environ.get("MAX_REPLY_CHARS", "900"))
 

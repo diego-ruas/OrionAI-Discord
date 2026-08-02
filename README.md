@@ -159,9 +159,42 @@ com o status HTTP e o corpo da resposta, e `[bot]` com o traceback completo.
 
 ## Imagens
 
-Mande uma imagem (jpeg/png/gif/webp) junto da mensagem e ela e enviada ao modelo de
-visao configurado em `OPENROUTER_VISION_MODEL`. Nessas chamadas as ferramentas ficam
-desligadas, porque a maioria dos modelos de visao gratuitos nao as suporta.
+Mande uma imagem (jpeg/png/gif/webp) junto da mensagem. O caminho tem tres etapas, e
+as duas primeiras acontecem na propria maquina:
+
+1. **Reduz** para `VISION_MAX_IMAGE_PX` (1024px) e recomprime em JPEG. Uma foto de
+   celular sai de ~11 MB para ~0,2 MB - o base64 de uma foto crua desperdicava token
+   a toa e podia estourar o limite da requisicao.
+2. **Le o texto com OCR local** (Tesseract, `OCR_ENABLED`). Print de codigo, de erro
+   ou de conversa - o caso mais comum no Discord - e resolvido aqui: leva menos de um
+   segundo, gasta ~100 MB de RAM e **a imagem nao sai da rede**. Se o OCR achar pelo
+   menos `OCR_MIN_CHARS` caracteres, o texto entra na conversa e a etapa 3 e pulada
+   (`OCR_SKIPS_VISION`).
+3. **Modelo de visao**, so para o que o OCR nao resolve (foto, meme, grafico). Nessas
+   chamadas as ferramentas ficam desligadas, porque a maioria dos modelos de visao
+   gratuitos nao as suporta.
+
+O texto lido por OCR entra marcado como dado, nunca como instrucao - a mesma protecao
+usada em conteudo vindo da web, ja que uma imagem pode conter texto tentando se passar
+por comando.
+
+### Processando tudo localmente
+
+Para nenhuma imagem sair da maquina, `VISION_ENABLED=false`: o bot responde com o que
+o OCR leu e avisa quando nao conseguiu enxergar.
+
+Para ter descricao de imagem de verdade sem usar a nuvem, aponte a visao para um
+servidor compativel com a API da OpenAI:
+
+```bash
+VISION_API_BASE=http://192.168.0.10:11434/v1   # Ollama, LM Studio, llama.cpp
+OPENROUTER_VISION_MODEL=moondream
+```
+
+Um aviso de dimensionamento: modelo de visao em CPU e pesado. Num NAS sem GPU e com
+8 GB, mesmo o moondream (~1.7B) ocupa 2-3 GB e leva de 30s a alguns minutos por
+imagem, com o bot parado esperando. Se for por esse caminho, rode o Ollama numa
+maquina com GPU e aponte o bot para ela pela rede - nao no proprio NAS.
 
 ## Comandos do bot
 

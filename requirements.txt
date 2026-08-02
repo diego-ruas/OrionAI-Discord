@@ -4,3 +4,9 @@ aiohttp>=3.9.0
 # Banco de timezones: Windows e a imagem python-slim nao tem um do sistema, e sem
 # isso o zoneinfo nao resolve TIMEZONE (app/utils/clock.py cai para UTC).
 tzdata>=2024.1
+# Redimensiona/recomprime a imagem antes de enviar (app/utils/image_processor.py) e
+# abre a imagem para o OCR. Sem ela o bot roda, mas manda a imagem no tamanho original.
+Pillow>=10.0.0
+# OCR local: le o texto da imagem sem mandar nada para fora. Precisa do binario
+# tesseract-ocr instalado no sistema (ver Dockerfile); sem ele o OCR se desliga sozinho.
+pytesseract>=0.3.10

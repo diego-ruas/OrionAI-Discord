@@ -26,25 +26,40 @@ class RateLimitError(Exception):
     pass
 
 
-async def _call_model(session, model, messages, use_tools):
+def vision_endpoint():
+    """URL e chave usadas nas chamadas de visao.
+
+    Sem VISION_API_BASE configurado, e o proprio OpenRouter. Apontando para um servidor
+    local compativel com a API da OpenAI (Ollama e afins), a imagem nunca sai da rede -
+    e como esses servidores geralmente nao pedem autenticacao, a chave e opcional.
+    """
+    if not config.vision_api_base:
+        return API_URL, config.openrouter_api_key
+    return f"{config.vision_api_base}/chat/completions", config.vision_api_key
+
+
+async def _call_model(session, model, messages, use_tools, endpoint=None):
     payload = {"model": model, "messages": messages}
     if use_tools:
         payload["tools"] = tool_definitions
 
+    url, api_key = endpoint or (API_URL, config.openrouter_api_key)
+
     headers = {
-        "Authorization": f"Bearer {config.openrouter_api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/diego-ruas/OrionAI-Discord",
         "X-Title": "OrionAI-Discord",
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
-    async with session.post(API_URL, json=payload, headers=headers) as res:
+    async with session.post(url, json=payload, headers=headers) as res:
         if res.status == 429:
             raise RateLimitError(f"Rate limit atingido no modelo {model}")
 
         if not res.ok:
             text = await res.text()
-            raise RuntimeError(f"OpenRouter respondeu {res.status} para {model}: {text}")
+            raise RuntimeError(f"{url} respondeu {res.status} para {model}: {text}")
 
         data = await res.json()
         choices = data.get("choices") or []
@@ -54,12 +69,12 @@ async def _call_model(session, model, messages, use_tools):
         return message
 
 
-async def _run_with_tools(model, initial_messages, use_tools, tool_context):
+async def _run_with_tools(model, initial_messages, use_tools, tool_context, endpoint=None):
     messages = list(initial_messages)
 
     async with aiohttp.ClientSession() as session:
         for _ in range(MAX_TOOL_ITERATIONS):
-            message = await _call_model(session, model, messages, use_tools)
+            message = await _call_model(session, model, messages, use_tools, endpoint)
 
             tool_calls = message.get("tool_calls")
             if tool_calls is not None and not isinstance(tool_calls, list):
@@ -118,7 +133,7 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context):
             f"[openrouter] {model} excedeu {MAX_TOOL_ITERATIONS} rodadas de tools; "
             "pedindo uma resposta final sem ferramentas."
         )
-        final = await _call_model(session, model, messages, use_tools=False)
+        final = await _call_model(session, model, messages, use_tools=False, endpoint=endpoint)
         content = final.get("content")
         if not (content or "").strip():
             raise RuntimeError(f"Modelo {model} nao produziu resposta final")
@@ -140,13 +155,13 @@ def build_image_content(text, images):
     return parts
 
 
-async def generate_reply(messages, tool_context=None, models=None, use_tools=True):
+async def generate_reply(messages, tool_context=None, models=None, use_tools=True, endpoint=None):
     models_to_try = models or [config.model, *config.fallback_models]
     last_error = None
 
     for model in models_to_try:
         try:
-            return await _run_with_tools(model, messages, use_tools, tool_context)
+            return await _run_with_tools(model, messages, use_tools, tool_context, endpoint)
         except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
             last_error = err
             print(f"[openrouter] Falha com {model}: {err}")
@@ -162,5 +177,9 @@ async def generate_vision_reply(messages, tool_context=None):
     que nao aceitaria o content com imagem.
     """
     return await generate_reply(
-        messages, tool_context=tool_context, models=[config.vision_model], use_tools=False
+        messages,
+        tool_context=tool_context,
+        models=[config.vision_model],
+        use_tools=False,
+        endpoint=vision_endpoint(),
     )
