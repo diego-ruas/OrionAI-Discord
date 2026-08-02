@@ -119,6 +119,26 @@ Alguns comportamentos existem so para a conversa nao soar como saida de maquina:
 - quando alguem responde a mensagem de outra pessoa, o trecho citado entra no
   contexto.
 
+## Presenca
+
+O "Assistindo/Ouvindo ..." embaixo do nome do bot alterna entre frases alimentadas por
+dados reais, a cada `PRESENCE_ROTATE_SECONDS`. Configuracao em `PRESENCE`, entradas
+`tipo:texto` separadas por `|`:
+
+```bash
+PRESENCE=listening:{prefix}ajuda|watching:{guilds} servidores|watching:{reminders} lembretes agendados
+```
+
+Tipos: `playing`, `watching`, `listening`, `competing`, `custom` (ou `jogando`,
+`assistindo`, `ouvindo`, `competindo`). Marcadores: `{prefix}`, `{guilds}`,
+`{reminders}`, `{model}`. Uma entrada cujo numero der zero e pulada, para o bot nao
+anunciar "0 lembretes agendados". Entrada mal formada e descartada com aviso no log em
+vez de derrubar o boot. `PRESENCE` vazio desliga.
+
+Nao da para fazer Rich Presence completo: o Discord aceita de bots apenas tipo, nome e
+state - imagem, botao e party sao ignorados, porque dependem do RPC usado por
+aplicativos de desktop.
+
 ## Memoria
 
 Sao duas memorias diferentes:

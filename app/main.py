@@ -34,7 +34,7 @@ from .openrouter import (
     generate_reply,
     generate_vision_reply,
 )
-from .utils import ocr
+from .utils import ocr, presence
 from .utils.clock import describe_timestamp, now_description, now_ms
 from .utils.image_processor import extract_images, has_images
 from .utils.reply_format import split_reply, truncate_reply, typing_delay
@@ -783,12 +783,61 @@ async def _before_reminder_loop():
     await client.wait_until_ready()
 
 
+# --- Presenca ---
+
+_presence_entries = presence.parse_spec(config.presence)
+_presence_index = 0
+
+
+def presence_stats():
+    """Dados reais usados nos marcadores da presenca."""
+    return {
+        "prefix": config.command_prefix,
+        "guilds": len(client.guilds),
+        "reminders": len(get_pending_reminders()),
+        "model": config.model.split("/")[-1].replace(":free", ""),
+    }
+
+
+@tasks.loop(seconds=180)
+async def presence_loop():
+    global _presence_index
+    try:
+        rotation = presence.build_rotation(_presence_entries, presence_stats())
+        if not rotation:
+            return
+
+        activity = rotation[_presence_index % len(rotation)]
+        _presence_index += 1
+        await client.change_presence(
+            activity=activity, status=presence.parse_status(config.presence_status)
+        )
+    except Exception as err:  # noqa: BLE001 - presenca nunca pode derrubar o bot
+        print(f"[presenca] Falha ao atualizar: {err}")
+
+
+@presence_loop.before_loop
+async def _before_presence_loop():
+    await client.wait_until_ready()
+
+
 # --- Eventos ---
 
 
 @client.event
 async def on_ready():
     print(f"Bot conectado como {client.user}")
+
+    if _presence_entries and not presence_loop.is_running():
+        presence_loop.change_interval(seconds=config.presence_rotate_seconds)
+        presence_loop.start()
+        print(
+            f"[presenca] {len(_presence_entries)} entrada(s), trocando a cada "
+            f"{config.presence_rotate_seconds:g}s."
+        )
+    elif not _presence_entries:
+        print("[presenca] Desligada (PRESENCE vazio ou sem entradas validas).")
+
     if not reminder_loop.is_running():
         reminder_loop.change_interval(seconds=config.reminder_check_seconds)
         reminder_loop.start()

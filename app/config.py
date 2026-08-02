@@ -286,6 +286,18 @@ class Config:
 
         self.timezone = os.environ.get("TIMEZONE", "America/Sao_Paulo")
 
+        # Presenca ("Jogando/Assistindo/Ouvindo ...") alternada. Formato: entradas
+        # "tipo:texto" separadas por "|". Ver app/utils/presence.py. Vazio desliga.
+        self.presence = os.environ.get(
+            "PRESENCE",
+            "listening:{prefix}ajuda|watching:{guilds} servidores|"
+            "watching:{reminders} lembretes agendados",
+        )
+        self.presence_rotate_seconds = float(
+            os.environ.get("PRESENCE_ROTATE_SECONDS", "180")
+        )
+        self.presence_status = os.environ.get("PRESENCE_STATUS", "online")
+
         # Prefixo dos comandos. Sem espacos, e vale minusculo (a comparacao e feita em
         # lowercase). Aparece nas mensagens de ajuda e de erro pelo codigo, nunca fixo.
         self.command_prefix = os.environ.get("COMMAND_PREFIX", "o!").strip() or "o!"

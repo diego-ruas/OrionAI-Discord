@@ -34,6 +34,9 @@ services:
       COMMAND_PREFIX: ${COMMAND_PREFIX:-o!}
       BOT_NAMES: ${BOT_NAMES:-orionai,orion}
       FOLLOWUP_WINDOW_SECONDS: ${FOLLOWUP_WINDOW_SECONDS:-15}
+      PRESENCE: ${PRESENCE:-listening:{prefix}ajuda|watching:{guilds} servidores|watching:{reminders} lembretes agendados}
+      PRESENCE_ROTATE_SECONDS: ${PRESENCE_ROTATE_SECONDS:-180}
+      PRESENCE_STATUS: ${PRESENCE_STATUS:-online}
       TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
       MAX_REMINDERS_PER_USER: ${MAX_REMINDERS_PER_USER:-10}
       REMINDER_CHECK_SECONDS: ${REMINDER_CHECK_SECONDS:-30}
