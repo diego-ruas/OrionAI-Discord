@@ -83,7 +83,7 @@ BRIEF_PROMPT = (
     "de listas, emojis ou floreio."
 )
 
-# Personas ativaveis via comando (ver app/main.py, comando "!modo <nome>"). A
+# Personas ativaveis via comando (ver app/main.py, comando "modo <nome>"). A
 # escolhida fica salva por canal no banco. "padrao" usa o SYSTEM_PROMPT configurado
 # (env var ou o default acima); as demais sao presets fixos no codigo.
 PERSONA_PRESETS = {
@@ -249,6 +249,10 @@ class Config:
         self.followup_window_seconds = float(os.environ.get("FOLLOWUP_WINDOW_SECONDS", "15"))
 
         self.timezone = os.environ.get("TIMEZONE", "America/Sao_Paulo")
+
+        # Prefixo dos comandos. Sem espacos, e vale minusculo (a comparacao e feita em
+        # lowercase). Aparece nas mensagens de ajuda e de erro pelo codigo, nunca fixo.
+        self.command_prefix = os.environ.get("COMMAND_PREFIX", "o!").strip() or "o!"
 
         # Lembretes: quantos cada pessoa pode ter agendados ao mesmo tempo, com que
         # frequencia o loop confere os vencidos e quao longe no futuro pode agendar.

@@ -148,7 +148,8 @@ def _schedule_reminder(args, context):
     if db.count_pending_reminders(user_id) >= config.max_reminders_per_user:
         return (
             f"Nao agendei: essa pessoa ja tem {config.max_reminders_per_user} lembretes "
-            "pendentes, o maximo permitido. Ela precisa cancelar algum com !cancelar."
+            f"pendentes, o maximo permitido. Ela precisa cancelar algum com "
+            f"{config.command_prefix}cancelar."
         )
 
     in_minutes = args.get("in_minutes")

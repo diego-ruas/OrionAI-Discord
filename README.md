@@ -89,13 +89,13 @@ O bot responde quando:
   duracao total da conversa. Se a pessoa mencionar ou responder outra pessoa nesse
   meio tempo, o bot entende que a conversa nao e com ele e fica calado.
 
-Para encerrar antes da janela expirar, use `!parar` (ou `!tchau`):
+Para encerrar antes da janela expirar, use `o!parar` (ou `o!tchau`):
 
 - **em canal**: encerra a conversa em andamento so de quem pediu, e o bot volta a
   exigir `@`. Nao silencia o bot para as outras pessoas do canal.
-- **em DM**: como ali ele responderia toda mensagem, o `!parar` liga um modo
+- **em DM**: como ali ele responderia toda mensagem, o `o!parar` liga um modo
   silencioso de verdade, guardado no banco (sobrevive a restart). Ele so volta a
-  falar quando voce chamar pelo nome ou mandar qualquer `!comando` - as duas coisas
+  falar quando voce chamar pelo nome ou mandar qualquer `o!comando` - as duas coisas
   que continuam funcionando com ele calado.
 
 As demais mensagens do canal nao geram resposta, mas as ultimas
@@ -124,11 +124,11 @@ Alguns comportamentos existem so para a conversa nao soar como saida de maquina:
 Sao duas memorias diferentes:
 
 - **Historico**: as ultimas `MEMORY_MAX_MESSAGES` mensagens do canal. Rotativo, e
-  apagado por `!reset`.
+  apagado por `o!reset`.
 - **Longo prazo**: fatos que o proprio modelo decide salvar (apelido, profissao,
   projetos, preferencias de resposta) com a ferramenta `remember_fact`. Sobrevive a
-  rotacao do historico e ao `!reset`; e visivel com `!memoria` e removivel com
-  `!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
+  rotacao do historico e ao `o!reset`; e visivel com `o!memoria` e removivel com
+  `o!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
 
 ## Lembretes
 
@@ -139,10 +139,10 @@ pediu - inclusive em DM, se foi pedido em DM.
 
 Os lembretes ficam no SQLite, nao em memoria, entao sobrevivem a restart do container.
 Se o bot estiver fora do ar na hora marcada, o lembrete e entregue assim que ele volta,
-com um aviso de que esta atrasado. `!reset` **nao** apaga lembretes.
+com um aviso de que esta atrasado. `o!reset` **nao** apaga lembretes.
 
-- `!lembretes` lista os seus, com o numero de cada um.
-- `!cancelar <numero>` cancela. Ninguem cancela lembrete de outra pessoa.
+- `o!lembretes` lista os seus, com o numero de cada um.
+- `o!cancelar <numero>` cancela. Ninguem cancela lembrete de outra pessoa.
 - Limites em `MAX_REMINDERS_PER_USER` e `MAX_REMINDER_DAYS`; a frequencia de
   verificacao em `REMINDER_CHECK_SECONDS`.
 
@@ -167,18 +167,18 @@ desligadas, porque a maioria dos modelos de visao gratuitos nao as suporta.
 
 Todos funcionam mencionando o bot no canal, ou direto em DM:
 
-- `!ajuda` - lista os comandos e as formas de chamar o bot.
-- `!modo` - mostra o modo atual e as opcoes; `!modo <nome>` troca (pede confirmacao
+- `o!ajuda` - lista os comandos e as formas de chamar o bot.
+- `o!modo` - mostra o modo atual e as opcoes; `o!modo <nome>` troca (pede confirmacao
   por reacao). Modos: `padrao`, `realista`, `casual`, `sarcastico`, `professor`,
   `direto`. A escolha e por canal e fica salva no banco.
-- `!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
-- `!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
-  `!memoria`); `!esquecer tudo` apaga todos, pedindo confirmacao.
-- `!lembretes` - lista seus lembretes agendados.
-- `!cancelar <numero>` - cancela um lembrete (o numero vem do `!lembretes`).
-- `!parar` (ou `!tchau`) - encerra a conversa na hora; em DM, silencia ate voce
+- `o!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
+- `o!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
+  `o!memoria`); `o!esquecer tudo` apaga todos, pedindo confirmacao.
+- `o!lembretes` - lista seus lembretes agendados.
+- `o!cancelar <numero>` - cancela um lembrete (o numero vem do `o!lembretes`).
+- `o!parar` (ou `o!tchau`) - encerra a conversa na hora; em DM, silencia ate voce
   chamar pelo nome ou mandar um comando.
-- `!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, lembretes
+- `o!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, lembretes
   pendentes, hora atual.
-- `!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao
+- `o!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao
   apaga a memoria de longo prazo nem os lembretes.

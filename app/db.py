@@ -75,7 +75,7 @@ _conn.executescript(
         channel_id TEXT PRIMARY KEY,
         persona TEXT NOT NULL
     );
-    -- Memoria de longo prazo: fatos que sobrevivem a rotacao do historico e ao !reset
+    -- Memoria de longo prazo: fatos que sobrevivem a rotacao do historico e ao reset
     -- de mensagens. Escritos pelo modelo via ferramenta remember_fact.
     CREATE TABLE IF NOT EXISTS facts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,8 +109,8 @@ _conn.executescript(
     );
     CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(delivered, remind_at);
     CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, delivered);
-    -- Canais em que o bot foi mandado calar a boca com !parar. So usado em DM, onde
-    -- ele responderia tudo por padrao; em canal de servidor o !parar apenas encerra a
+    -- Canais em que o bot foi mandado calar a boca com o comando parar. So usado em
+    -- DM, onde ele responderia tudo por padrao; em canal o parar apenas encerra a
     -- janela de follow-up, sem silenciar o bot para os outros.
     CREATE TABLE IF NOT EXISTS muted_channels (
         channel_id TEXT PRIMARY KEY,

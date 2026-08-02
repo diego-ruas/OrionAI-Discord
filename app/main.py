@@ -76,7 +76,7 @@ def _mark_engagement(channel_id, user_id):
 
 
 def _clear_engagement(channel_id, user_id):
-    """Encerra a janela de follow-up na hora (comando !parar)."""
+    """Encerra a janela de follow-up na hora (comando `parar`)."""
     _last_engagement.pop((channel_id, user_id), None)
 
 
@@ -97,14 +97,13 @@ def _mentions_bot_by_name(content):
 
 
 def _looks_like_command(content):
-    first = content.strip().lower().split(maxsplit=1)
-    return bool(first) and first[0] in COMMANDS
+    return parse_command(content) is not None
 
 
 def _breaks_silence(content):
     """O que tira o bot do modo silencioso: chamar pelo nome ou mandar um comando.
 
-    Precisa ser algo que funcione mesmo com ele calado, senao o !parar em DM viraria
+    Precisa ser algo que funcione mesmo com ele calado, senao o `parar` em DM viraria
     uma porta sem maçaneta do lado de dentro.
     """
     return _mentions_bot_by_name(content) or _looks_like_command(content)
@@ -141,7 +140,7 @@ def should_respond(message, replied_to):
     if message.author.bot:
         return False
     if isinstance(message.channel, discord.DMChannel):
-        # Em DM ele responderia tudo; o !parar e a unica forma de conseguir silencio.
+        # Em DM ele responderia tudo; o `parar` e a unica forma de conseguir silencio.
         if is_muted(str(message.channel.id)):
             return _breaks_silence(message.content)
         return True
@@ -236,30 +235,84 @@ async def send_reply(message, text):
 
 # --- Comandos ---
 
-HELP_TEXT = (
-    "**Como falar comigo**\n"
+HELP_INTRO = (
     "Me marque com @, responda uma mensagem minha, me chame pelo nome ou me manda DM. "
     "Depois de eu responder, voce pode continuar falando por alguns instantes sem "
-    "precisar me marcar de novo. Se mandar uma imagem junto, eu olho a imagem.\n\n"
-    "**Lembretes**\n"
-    "Pede na conversa mesmo: \"me lembra em 20 minutos de tirar o bolo\" ou \"me avisa "
-    "amanha as 9 da reuniao\". Eu aviso neste mesmo canal, te marcando.\n\n"
-    "**Comandos**\n"
-    "`!ajuda` - esta mensagem\n"
-    "`!modo` - ver o modo atual e as opcoes; `!modo <nome>` troca\n"
-    "`!memoria` - ver o que eu lembro deste canal\n"
-    "`!esquecer <numero>` - apagar um item da memoria (`!esquecer tudo` apaga todos)\n"
-    "`!lembretes` - ver seus lembretes agendados\n"
-    "`!cancelar <numero>` - cancelar um lembrete\n"
-    "`!parar` - encerrar a conversa na hora (em DM, fico calado ate voce me chamar "
-    "pelo nome ou mandar um comando)\n"
-    "`!status` - modelo, modo e tamanho da memoria deste canal\n"
-    "`!reset` - apagar o historico de conversa deste canal"
+    "precisar me marcar de novo. Se mandar uma imagem junto, eu olho a imagem."
+)
+
+HELP_REMINDERS = (
+    "Pede na conversa mesmo: *\"me lembra em 20 minutos de tirar o bolo\"* ou "
+    "*\"me avisa amanha as 9 da reuniao\"*. Eu aviso neste mesmo canal, te marcando."
 )
 
 
+def _help_sections():
+    """Titulo e conteudo de cada bloco da ajuda, ja com o prefixo configurado."""
+    p = config.command_prefix
+    return [
+        ("Como falar comigo", HELP_INTRO),
+        ("Lembretes", HELP_REMINDERS),
+        (
+            "Conversa",
+            f"`{p}modo` - ver o modo atual e as opcoes; `{p}modo <nome>` troca\n"
+            f"`{p}parar` - encerrar a conversa na hora (em DM fico calado ate voce me "
+            f"chamar pelo nome ou mandar um comando)\n"
+            f"`{p}reset` - apagar o historico de conversa deste canal",
+        ),
+        (
+            "Memoria",
+            f"`{p}memoria` - ver o que eu lembro deste canal\n"
+            f"`{p}esquecer <numero>` - apagar um item (`{p}esquecer tudo` apaga todos)",
+        ),
+        (
+            "Lembretes agendados",
+            f"`{p}lembretes` - ver os seus\n"
+            f"`{p}cancelar <numero>` - cancelar um deles",
+        ),
+        ("Diagnostico", f"`{p}status` - modelos, modo, memoria e lembretes pendentes"),
+    ]
+
+
+def _help_header():
+    p = config.command_prefix
+    return (
+        f"Prefixo dos comandos: `{p}` — por exemplo, `{p}status`. "
+        f"Esta mensagem: `{p}ajuda`."
+    )
+
+
+def build_help_text():
+    """Versao em texto puro, usada se o bot nao puder mandar embed no canal."""
+    blocks = [f"**{title}**\n{body}" for title, body in _help_sections()]
+    return _help_header() + "\n\n" + "\n\n".join(blocks)
+
+
+def build_help_embed():
+    embed = discord.Embed(
+        title=getattr(client.user, "display_name", None) or "Ajuda",
+        description=_help_header(),
+        color=discord.Color.blurple(),
+    )
+
+    avatar = getattr(client.user, "display_avatar", None)
+    if avatar is not None:
+        embed.set_thumbnail(url=avatar.url)
+
+    for title, body in _help_sections():
+        embed.add_field(name=title, value=body, inline=False)
+
+    return embed
+
+
 async def handle_help_command(message):
-    await message.reply(HELP_TEXT)
+    try:
+        await message.reply(embed=build_help_embed())
+    except (discord.Forbidden, discord.HTTPException) as err:
+        # Mandar embed exige a permissao "Incorporar links" no canal; sem ela o envio
+        # falha mas texto puro ainda passa.
+        print(f"[bot] Falha ao enviar embed de ajuda ({err}), caindo para texto.")
+        await message.reply(build_help_text())
 
 
 async def handle_mode_command(message, channel_id, text):
@@ -272,7 +325,8 @@ async def handle_mode_command(message, channel_id, text):
             f"- `{key}` - {PERSONA_DESCRIPTIONS.get(key, '')}" for key in PERSONA_PRESETS
         )
         await message.reply(
-            f"Modo atual: **{current}**.\n{options}\n\nUse `!modo <nome>` para trocar."
+            f"Modo atual: **{current}**.\n{options}\n\n"
+            f"Use `{config.command_prefix}modo <nome>` para trocar."
         )
         return
 
@@ -306,7 +360,7 @@ async def handle_memory_command(message, channel_id):
     body = "\n".join(lines)
     reply = (
         f"O que eu lembro deste canal:\n{body}\n\n"
-        "-# Use `!esquecer <numero>` para apagar um item."
+        f"-# Use `{config.command_prefix}esquecer <numero>` para apagar um item."
     )
     await message.reply(reply[:2000])
 
@@ -314,10 +368,12 @@ async def handle_memory_command(message, channel_id):
 async def handle_forget_command(message, channel_id, text):
     parts = text.split(maxsplit=1)
     argument = parts[1].strip().lower() if len(parts) > 1 else ""
+    prefix = config.command_prefix
 
     if not argument:
         await message.reply(
-            "Use `!esquecer <numero>` (o numero vem de `!memoria`) ou `!esquecer tudo`."
+            f"Use `{prefix}esquecer <numero>` (o numero vem de `{prefix}memoria`) ou "
+            f"`{prefix}esquecer tudo`."
         )
         return
 
@@ -331,7 +387,9 @@ async def handle_forget_command(message, channel_id, text):
         return
 
     if not argument.isdigit():
-        await message.reply("Preciso do numero do item, como aparece em `!memoria`.")
+        await message.reply(
+            f"Preciso do numero do item, como aparece em `{prefix}memoria`."
+        )
         return
 
     facts = get_facts(channel_id)
@@ -351,12 +409,12 @@ async def handle_stop_command(message, channel_id):
     if isinstance(message.channel, discord.DMChannel):
         set_muted(channel_id, True)
         await message.reply(
-            "Ok, fico quieto. Me chama pelo nome ou manda qualquer `!comando` quando "
-            "quiser retomar."
+            "Ok, fico quieto. Me chama pelo nome ou manda qualquer comando "
+            f"`{config.command_prefix}...` quando quiser retomar."
         )
         return
 
-    # Em canal, silenciar valeria para todo mundo - um !parar de alguem calaria o bot
+    # Em canal, silenciar valeria para todo mundo - um `parar` de alguem calaria o bot
     # para os outros. Aqui ele so encerra a conversa em andamento com quem pediu.
     _clear_engagement(channel_id, message.author.id)
     await message.reply("Ok, paro por aqui. Me marca com @ quando precisar.")
@@ -379,7 +437,8 @@ async def handle_reminders_command(message, channel_id):
 
     body = "\n".join(lines)
     reply = (
-        f"Seus lembretes:\n{body}\n\n-# Use `!cancelar <numero>` para cancelar um deles."
+        f"Seus lembretes:\n{body}\n\n"
+        f"-# Use `{config.command_prefix}cancelar <numero>` para cancelar um deles."
     )
     await message.reply(reply[:2000])
 
@@ -390,7 +449,8 @@ async def handle_cancel_command(message, text):
 
     if not argument.isdigit():
         await message.reply(
-            "Use `!cancelar <numero>`, com o numero que aparece em `!lembretes`."
+            f"Use `{config.command_prefix}cancelar <numero>`, com o numero que aparece "
+            f"em `{config.command_prefix}lembretes`."
         )
         return
 
@@ -429,32 +489,49 @@ async def handle_status_command(message, channel_id):
     )
 
 
-COMMANDS = (
-    "!ajuda",
-    "!help",
-    "!reset",
-    "!modo",
-    "!memoria",
-    "!esquecer",
-    "!status",
-    "!lembretes",
-    "!cancelar",
-    "!parar",
-    "!tchau",
+# Nomes dos comandos sem o prefixo: ele e configuravel (config.command_prefix), entao
+# nao pode estar grudado aqui nem nas mensagens mostradas ao usuario.
+COMMAND_NAMES = (
+    "ajuda",
+    "help",
+    "reset",
+    "modo",
+    "memoria",
+    "esquecer",
+    "status",
+    "lembretes",
+    "cancelar",
+    "parar",
+    "tchau",
 )
+
+
+def parse_command(text):
+    """Devolve o nome do comando (sem prefixo) se o texto for um, senao None."""
+    first = (text or "").strip().lower().split(maxsplit=1)
+    if not first:
+        return None
+
+    prefix = config.command_prefix.lower()
+    token = first[0]
+    if not token.startswith(prefix):
+        return None
+
+    name = token[len(prefix) :]
+    return name if name in COMMAND_NAMES else None
 
 
 async def handle_command(message, channel_id, text):
     """Executa um comando. Retorna True se o texto era um comando."""
-    lowered = text.lower()
-    command = lowered.split(maxsplit=1)[0] if lowered else ""
-
-    if command not in COMMANDS:
+    command = parse_command(text)
+    if command is None:
         return False
 
-    if command in ("!ajuda", "!help"):
+    prefix = config.command_prefix
+
+    if command in ("ajuda", "help"):
         await handle_help_command(message)
-    elif command == "!reset":
+    elif command == "reset":
         confirmed = await ask_confirmation(
             message, "Tem certeza que quer apagar a memoria deste canal?"
         )
@@ -462,21 +539,21 @@ async def handle_command(message, channel_id, text):
             clear_history(channel_id)
             await message.channel.send(
                 "Historico apagado. O que eu tinha memorizado a longo prazo continua "
-                "ai - use `!esquecer tudo` se quiser limpar isso tambem."
+                f"ai - use `{prefix}esquecer tudo` se quiser limpar isso tambem."
             )
-    elif command == "!modo":
+    elif command == "modo":
         await handle_mode_command(message, channel_id, text)
-    elif command == "!memoria":
+    elif command == "memoria":
         await handle_memory_command(message, channel_id)
-    elif command == "!esquecer":
+    elif command == "esquecer":
         await handle_forget_command(message, channel_id, text)
-    elif command == "!status":
+    elif command == "status":
         await handle_status_command(message, channel_id)
-    elif command == "!lembretes":
+    elif command == "lembretes":
         await handle_reminders_command(message, channel_id)
-    elif command == "!cancelar":
+    elif command == "cancelar":
         await handle_cancel_command(message, text)
-    elif command in ("!parar", "!tchau"):
+    elif command in ("parar", "tchau"):
         await handle_stop_command(message, channel_id)
 
     return True
@@ -688,7 +765,7 @@ async def on_message(message):
 
     # Chegou aqui em DM estando silenciado quer dizer que a pessoa chamou pelo nome ou
     # mandou um comando: sai do silencio. Vem antes de handle_command de proposito, para
-    # um !parar seguido de outro !parar continuar silenciando.
+    # um `parar` seguido de outro `parar` continuar silenciando.
     if isinstance(message.channel, discord.DMChannel) and is_muted(channel_id):
         set_muted(channel_id, False)
 
