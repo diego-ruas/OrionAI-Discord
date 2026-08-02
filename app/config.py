@@ -243,6 +243,13 @@ class Config:
         # bot nunca envia imagem para fora - responde com o que o OCR conseguiu ler.
         self.vision_enabled = _flag("VISION_ENABLED", True)
 
+        # Como a visao e usada. Ligado (padrao): o modelo de visao so descreve a imagem,
+        # recebendo um prompt minusculo, e quem redige a resposta e o modelo de texto de
+        # sempre. Sai muito mais barato (o prompt inteiro e o historico nao sobem junto),
+        # o provedor de visao nao ve a conversa, e a resposta mantem a persona e as
+        # ferramentas. Desligado: o modelo de visao responde direto, numa chamada so.
+        self.vision_describe_only = _flag("VISION_DESCRIBE_ONLY", True)
+
         self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
         self.max_reply_chars = int(os.environ.get("MAX_REPLY_CHARS", "900"))
 

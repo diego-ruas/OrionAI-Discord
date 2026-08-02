@@ -170,9 +170,17 @@ as duas primeiras acontecem na propria maquina:
    segundo, gasta ~100 MB de RAM e **a imagem nao sai da rede**. Se o OCR achar pelo
    menos `OCR_MIN_CHARS` caracteres, o texto entra na conversa e a etapa 3 e pulada
    (`OCR_SKIPS_VISION`).
-3. **Modelo de visao**, so para o que o OCR nao resolve (foto, meme, grafico). Nessas
-   chamadas as ferramentas ficam desligadas, porque a maioria dos modelos de visao
-   gratuitos nao as suporta.
+3. **Modelo de visao**, so para o que o OCR nao resolve (foto, meme, grafico). Por
+   padrao (`VISION_DESCRIBE_ONLY`) ele apenas **descreve** a imagem, recebendo um
+   prompt de ~70 tokens e mais nada; quem redige a resposta e o modelo de texto de
+   sempre, a partir dessa descricao.
+
+A etapa 3 em duas fases existe por tres motivos: o provedor de visao deixa de receber
+o system prompt inteiro, o historico do canal e os fatos memorizados (~60% menos
+tokens); a resposta final mantem a persona e pode usar as ferramentas, o que nao
+acontecia quando o modelo de visao respondia direto; e a conversa nao vaza para um
+provedor diferente do de texto. Com `VISION_DESCRIBE_ONLY=false` volta ao modo de uma
+chamada so.
 
 O texto lido por OCR entra marcado como dado, nunca como instrucao - a mesma protecao
 usada em conteudo vindo da web, ja que uma imagem pode conter texto tentando se passar
@@ -190,6 +198,24 @@ servidor compativel com a API da OpenAI:
 VISION_API_BASE=http://192.168.0.10:11434/v1   # Ollama, LM Studio, llama.cpp
 OPENROUTER_VISION_MODEL=moondream
 ```
+
+### Usando o Gemini so para as imagens
+
+O mesmo mecanismo serve para trocar de provedor apenas na visao, mantendo o texto no
+OpenRouter:
+
+```bash
+VISION_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
+VISION_API_KEY=sua_chave_do_gemini
+OPENROUTER_VISION_MODEL=gemini-2.5-flash
+```
+
+Sobre o custo: o Gemini cobra 258 tokens quando os dois lados da imagem tem no maximo
+384px, e passa a cobrar por ladrilho acima disso - 4 ladrilhos (1032 tokens) para
+qualquer imagem 4:3 maior, 6 para 16:9. Como o corte e por ladrilho e nao por pixel,
+`VISION_MAX_IMAGE_PX` em 1024, 768 ou 512 custa exatamente o mesmo; so 384 fica mais
+barato, perdendo detalhe. Somado ao OCR (que evita a chamada inteira nos prints) e ao
+modo de descricao, uma imagem sai por volta de 1.100 tokens em vez de 2.700.
 
 Um aviso de dimensionamento: modelo de visao em CPU e pesado. Num NAS sem GPU e com
 8 GB, mesmo o moondream (~1.7B) ocupa 2-3 GB e leva de 30s a alguns minutos por
