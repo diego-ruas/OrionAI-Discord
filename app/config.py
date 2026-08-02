@@ -154,7 +154,7 @@ class Config:
         self.discord_token = _required("DISCORD_TOKEN")
         self.openrouter_api_key = _required("OPENROUTER_API_KEY")
         self.crw_api_key = os.environ.get("CRW_API_KEY", "")
-        self.model = os.environ.get("OPENROUTER_MODEL", "tencent/hy3:free")
+        self.model = os.environ.get("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")
         # VISION_MODEL e o nome atual: desde que a visao pode apontar para outro
         # provedor (VISION_API_BASE), chamar isso de "OPENROUTER_..." confundia - o
         # valor tem que ser o id do modelo no endpoint escolhido, seja OpenRouter,

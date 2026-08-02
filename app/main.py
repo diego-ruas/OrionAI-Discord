@@ -33,7 +33,8 @@ from .openrouter import (
     generate_vision_reply,
 )
 from .permissions import can_manage, denial_message
-from .utils import ocr, presence
+from .tools import create_reminder
+from .utils import ocr, presence, reminder_parser
 from .utils.clock import describe_timestamp, now_description, now_ms
 from .utils.image_processor import extract_images, has_images
 from .utils.reply_format import split_reply, truncate_reply, typing_delay
@@ -692,6 +693,33 @@ def reminder_promise_broken(user_text, reply, created):
     )
 
 
+def rescue_reminder(text, tool_context):
+    """Agenda a partir do texto quando o modelo pediu para nao chamar a ferramenta.
+
+    Interpretar "daqui 1 minuto" e trabalho deterministico; deixar isso na mao de um
+    modelo gratuito significa a pessoa perder o lembrete quando ele resolve so dizer
+    "pode deixar". So roda se nada foi agendado pelo caminho normal.
+    """
+    pedido = reminder_parser.parse(text, config.timezone)
+    if not pedido:
+        return None
+
+    remind_at, assunto = pedido
+    try:
+        resultado = create_reminder(tool_context, assunto, remind_at)
+    except Exception as err:  # noqa: BLE001 - nunca derrubar a resposta por causa disso
+        print(f"[lembretes] Rede de seguranca falhou: {err}")
+        return None
+
+    criados = tool_context.get("created_reminders") or []
+    if criados:
+        print(f"[lembretes] Modelo nao agendou; salvo pelo texto: {assunto!r}")
+        return criados[-1]
+
+    print(f"[lembretes] Rede de seguranca nao agendou: {resultado}")
+    return None
+
+
 def format_reminder_footer(created):
     """Confirmacao escrita pelo codigo, a partir do que foi mesmo gravado."""
     if len(created) == 1:
@@ -1063,6 +1091,11 @@ async def on_message(message):
                 # no banco - o modelo ja prometeu lembrete sem chamar a ferramenta, e
                 # nesse caso a pessoa ficava esperando um aviso que nunca viria.
                 criados = tool_context.get("created_reminders") or []
+                if not criados:
+                    # Rede de seguranca: le o pedido do proprio texto do usuario.
+                    if rescue_reminder(text, tool_context):
+                        criados = tool_context.get("created_reminders") or []
+
                 if criados:
                     reply += format_reminder_footer(criados)
                 elif reminder_promise_broken(text, reply, criados):

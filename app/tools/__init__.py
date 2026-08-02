@@ -135,22 +135,57 @@ tool_definitions = [
 ]
 
 
-def _schedule_reminder(args, context):
+def create_reminder(context, text, remind_at):
+    """Grava o lembrete e registra no contexto o que foi gravado.
+
+    Usada tanto pela ferramenta quanto pela rede de seguranca que le o pedido direto do
+    texto (app/utils/reminder_parser.py), para as duas passarem pelos mesmos limites e
+    produzirem a mesma confirmacao. Quem confirma ao usuario e o codigo, nao o modelo:
+    ja aconteceu de ele responder "anotado" sem ter chamado ferramenta nenhuma.
+    """
     channel_id = context.get("channel_id")
     user_id = context.get("user_id")
     if not channel_id or not user_id:
         raise RuntimeError("Sem canal ou usuario para agendar o lembrete.")
 
-    text = (args.get("text") or "").strip()
+    text = (text or "").strip()
     if not text:
         return "Nao agendei: o lembrete precisa de um assunto."
 
-    if db.count_pending_reminders(user_id) >= config.max_reminders_per_user:
+    if db.count_pending_reminders(str(user_id)) >= config.max_reminders_per_user:
         return (
             f"Nao agendei: essa pessoa ja tem {config.max_reminders_per_user} lembretes "
             f"pendentes, o maximo permitido. Ela precisa cancelar algum com "
             f"{config.command_prefix}cancelar."
         )
+
+    now = now_ms()
+    if remind_at <= now:
+        return (
+            "Nao agendei: esse horario ja passou. Confirme com a pessoa para quando ela "
+            "quer o lembrete."
+        )
+
+    horizon = now + config.max_reminder_days * 86_400_000
+    if remind_at > horizon:
+        return (
+            f"Nao agendei: nao consigo agendar para mais de {config.max_reminder_days} "
+            "dias a frente."
+        )
+
+    db.add_reminder(channel_id, str(user_id), context.get("username"), text[:500], remind_at)
+    quando = describe_timestamp(remind_at, config.timezone)
+    context.setdefault("created_reminders", []).append({"text": text, "when": quando})
+    return f"Lembrete agendado para {quando}: {text}"
+
+
+def _schedule_reminder(args, context):
+    """Interpreta os argumentos do modelo; os limites ficam em create_reminder."""
+    text = (args.get("text") or "").strip()
+    # Checado aqui tambem, antes do horario: com os dois faltando, reclamar do assunto
+    # e mais util para o modelo do que reclamar do campo de tempo.
+    if not text:
+        return "Nao agendei: o lembrete precisa de um assunto."
 
     in_minutes = args.get("in_minutes")
     at = (args.get("at") or "").strip()
@@ -175,27 +210,7 @@ def _schedule_reminder(args, context):
     else:
         return "Nao agendei: falta in_minutes ou at."
 
-    if remind_at <= now:
-        return (
-            "Nao agendei: esse horario ja passou. Confirme com a pessoa para quando ela "
-            "quer o lembrete."
-        )
-
-    horizon = now + config.max_reminder_days * 86_400_000
-    if remind_at > horizon:
-        return (
-            f"Nao agendei: nao consigo agendar para mais de {config.max_reminder_days} "
-            "dias a frente."
-        )
-
-    db.add_reminder(channel_id, str(user_id), context.get("username"), text[:500], remind_at)
-
-    # Registra no contexto o que foi realmente gravado. Quem confirma ao usuario e o
-    # codigo, nao o modelo: ja aconteceu de o modelo responder "anotado" sem ter
-    # chamado esta ferramenta, e o lembrete simplesmente nao existir.
-    quando = describe_timestamp(remind_at, config.timezone)
-    context.setdefault("created_reminders", []).append({"text": text, "when": quando})
-    return f"Lembrete agendado para {quando}: {text}"
+    return create_reminder(context, text, remind_at)
 
 
 async def run_tool(name, args, context=None):

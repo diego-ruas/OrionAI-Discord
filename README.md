@@ -20,6 +20,7 @@ app/
   utils/
     image_processor.py  # download/base64 de anexos de imagem
     reply_format.py     # corte limpo e quebra da resposta em varias mensagens
+    reminder_parser.py  # le "daqui 1 minuto" do texto quando o modelo nao agenda
     clock.py            # data/hora local e interpretacao de horarios de lembrete
 ```
 
@@ -182,6 +183,15 @@ Pedidos em linguagem natural no meio da conversa: "me lembra em 20 minutos de ti
 bolo", "me avisa amanha as 9 da reuniao". O modelo chama a ferramenta
 `schedule_reminder` e o bot entrega **no mesmo canal onde foi pedido**, marcando quem
 pediu - inclusive em DM, se foi pedido em DM.
+
+Quem confirma e o codigo, nao o modelo: a resposta so ganha o rodape "Lembrete salvo
+para <horario>" quando existe linha no banco. Se o modelo prometer um lembrete sem
+agendar - acontece com modelo gratuito - o proprio bot avisa que nao deu certo, em vez
+de deixar a pessoa esperando.
+
+Como rede de seguranca, quando o modelo nao agenda o bot interpreta o pedido direto do
+texto ("daqui 1 minuto", "em 20 minutos", "amanha as 9", "as 15:30") e agenda sozinho.
+Isso e trabalho deterministico e nao deveria depender de o modelo estar inspirado.
 
 Os lembretes ficam no SQLite, nao em memoria, entao sobrevivem a restart do container.
 Se o bot estiver fora do ar na hora marcada, o lembrete e entregue assim que ele volta,
