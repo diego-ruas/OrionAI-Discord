@@ -188,10 +188,14 @@ def _schedule_reminder(args, context):
             "dias a frente."
         )
 
-    db.add_reminder(channel_id, user_id, context.get("username"), text[:500], remind_at)
-    return (
-        f"Lembrete agendado para {describe_timestamp(remind_at, config.timezone)}: {text}"
-    )
+    db.add_reminder(channel_id, str(user_id), context.get("username"), text[:500], remind_at)
+
+    # Registra no contexto o que foi realmente gravado. Quem confirma ao usuario e o
+    # codigo, nao o modelo: ja aconteceu de o modelo responder "anotado" sem ter
+    # chamado esta ferramenta, e o lembrete simplesmente nao existir.
+    quando = describe_timestamp(remind_at, config.timezone)
+    context.setdefault("created_reminders", []).append({"text": text, "when": quando})
+    return f"Lembrete agendado para {quando}: {text}"
 
 
 async def run_tool(name, args, context=None):

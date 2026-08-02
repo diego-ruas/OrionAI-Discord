@@ -127,7 +127,12 @@ REMINDER_INSTRUCTIONS = (
     "hora de avisar (ex: 'tomar o remedio'), sem repetir a palavra 'lembrete'. Confirme "
     "em uma frase curta o que foi agendado e para quando. Se o horario estiver ambiguo ou "
     "no passado, pergunte antes de agendar em vez de adivinhar. O lembrete e entregue no "
-    "mesmo canal onde foi pedido, marcando quem pediu."
+    "mesmo canal onde foi pedido, marcando quem pediu.\n"
+    "IMPORTANTE: dizer que vai lembrar nao agenda nada - quem agenda e a chamada da "
+    "ferramenta. Nunca responda 'anotado', 'vou te lembrar', 'pode deixar' ou parecido "
+    "sem ter chamado schedule_reminder e recebido de volta a confirmacao com o horario. "
+    "Se a ferramenta responder que nao agendou, diga isso a pessoa em vez de fingir que "
+    "deu certo."
 )
 
 # Sempre anexado ao prompt de sistema, mesmo se SYSTEM_PROMPT for customizado via env var,

@@ -666,6 +666,40 @@ def format_history(history):
     return formatted
 
 
+# A pessoa pedindo lembrete, e o modelo dizendo que agendou. As duas coisas juntas, sem
+# lembrete no banco, significam que o modelo prometeu sem chamar a ferramenta.
+_PEDIDO_DE_LEMBRETE = re.compile(
+    r"\bme\s+(lembr|avis)|\blembrete\b|\bme\s+acord", re.IGNORECASE
+)
+_PROMESSA_DE_LEMBRETE = re.compile(
+    r"\b(vou|irei)\s+(te\s+)?(lembrar|avisar)|\blembrete\s+(agendad|criad|marcad)"
+    r"|\banotad[oa]\b|\bte\s+aviso\b|\bpode\s+deixar\b",
+    re.IGNORECASE,
+)
+
+
+def reminder_promise_broken(user_text, reply, created):
+    """True quando o modelo prometeu um lembrete que nao existe no banco.
+
+    Exige os dois sinais - pedido do usuario e promessa na resposta - para nao acusar
+    falsamente quem so estava conversando sobre lembretes.
+    """
+    if created:
+        return False
+    return bool(
+        _PEDIDO_DE_LEMBRETE.search(user_text or "")
+        and _PROMESSA_DE_LEMBRETE.search(reply or "")
+    )
+
+
+def format_reminder_footer(created):
+    """Confirmacao escrita pelo codigo, a partir do que foi mesmo gravado."""
+    if len(created) == 1:
+        return f"\n-# ⏰ Lembrete salvo para {created[0]['when']}."
+    itens = "; ".join(f"{c['text']} ({c['when']})" for c in created)
+    return f"\n-# ⏰ {len(created)} lembretes salvos: {itens}"
+
+
 def read_images_locally(images):
     """Roda o OCR local em cada imagem e devolve os textos que valem a pena usar.
 
@@ -1024,6 +1058,20 @@ async def on_message(message):
                     reply = await generate_reply(messages, tool_context)
 
                 reply = truncate_reply(reply, config.max_reply_chars)
+
+                # Confirmacao e desmentido escritos pelo codigo, com base no que existe
+                # no banco - o modelo ja prometeu lembrete sem chamar a ferramenta, e
+                # nesse caso a pessoa ficava esperando um aviso que nunca viria.
+                criados = tool_context.get("created_reminders") or []
+                if criados:
+                    reply += format_reminder_footer(criados)
+                elif reminder_promise_broken(text, reply, criados):
+                    print(f"[lembretes] Promessa sem agendamento de {message.author.name}")
+                    reply += (
+                        "\n-# ⚠️ Nao consegui agendar de verdade. Tenta de novo dizendo "
+                        f"o horario de forma bem direta, ou use `{config.command_prefix}"
+                        "lembretes` para conferir."
+                    )
 
                 # O historico guarda o texto do usuario mais a nota de anexo, pra que numa
                 # proxima mensagem o bot ainda saiba que uma imagem foi enviada antes.
