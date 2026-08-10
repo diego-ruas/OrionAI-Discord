@@ -1,8 +1,7 @@
 """Quem pode apagar ou alterar dados do bot.
 
 So operacoes destrutivas passam por aqui: limpar historico e apagar memoria de longo
-prazo. Ler (memoria, lembretes, status), conversar e agendar lembrete continuam livres
-para todo mundo - o objetivo e evitar estrago, nao burocratizar o uso.
+prazo. Ler (memoria, status) e conversar continuam livres para todo mundo - o objetivo e evitar estrago, nao burocratizar o uso.
 
 Em DM nao existe hierarquia e o dado e da propria pessoa, entao la e sempre permitido:
 o contrario trancaria alguem para fora do proprio historico.

@@ -35,14 +35,11 @@ services:
       ADMIN_ROLES: ${ADMIN_ROLES:-}
       BOT_NAMES: ${BOT_NAMES:-orionai,orion}
       FOLLOWUP_WINDOW_SECONDS: ${FOLLOWUP_WINDOW_SECONDS:-15}
-      PRESENCE: ${PRESENCE:-listening:{prefix}ajuda|watching:{guilds} servidores|watching:{reminders} lembretes agendados}
+      PRESENCE: ${PRESENCE:-listening:{prefix}ajuda|watching:{guilds} servidores}
       PRESENCE_ROTATE_SECONDS: ${PRESENCE_ROTATE_SECONDS:-180}
       PRESENCE_STATUS: ${PRESENCE_STATUS:-online}
       TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
-      MAX_REMINDERS_PER_USER: ${MAX_REMINDERS_PER_USER:-10}
-      REMINDER_CHECK_SECONDS: ${REMINDER_CHECK_SECONDS:-30}
-      MAX_REMINDER_DAYS: ${MAX_REMINDER_DAYS:-365}
-      SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce e um assistente profissional em um servidor do Discord. Responda em portugues, com tom cordial, objetivo e preciso. Priorize clareza e correcao sobre informalidade, e seja conciso sem omitir informacoes relevantes. Sobre tamanho, va direto ao ponto - evite paragrafos longos, listas extensas ou texto em excesso quando uma resposta curta resolve; se o assunto realmente exigir mais detalhe, use poucos paragrafos curtos em vez de um bloco unico de texto.}
+      SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce conversa com as pessoas de um servidor do Discord. Responda em portugues, num tom leve e bem-humorado, como alguem que e boa companhia no chat e por acaso tambem sabe das coisas. Va direto ao ponto - evite texto em excesso quando uma resposta curta resolve; quando o assunto exigir mais detalhe, de o detalhe, usando paragrafos curtos em vez de um bloco unico de texto.}
     volumes:
       - ./data:/app/data
     x-casaos:

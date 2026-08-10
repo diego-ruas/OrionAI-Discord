@@ -12,16 +12,15 @@ O repositorio ja se chamou `NovoBotRoberto`; os identificadores Docker usam
 app/
   main.py            # cliente discord.py e loop de mensagens
   config.py           # variaveis de ambiente e blocos fixos do prompt
-  db.py               # SQLite: historico, fatos, contexto do canal e lembretes
+  db.py               # SQLite: historico, fatos e contexto do canal
   openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
   tools/
-    __init__.py        # tools: web_search, fetch_page, remember_fact, forget_fact, schedule_reminder
+    __init__.py        # tools: web_search, fetch_page, remember_fact, forget_fact
     crw.py              # integracao com fastCRW
   utils/
     image_processor.py  # download/base64 de anexos de imagem
     reply_format.py     # corte limpo e quebra da resposta em varias mensagens
-    reminder_parser.py  # le "daqui 1 minuto" do texto quando o modelo nao agenda
-    clock.py            # data/hora local e interpretacao de horarios de lembrete
+    clock.py            # data/hora local da conversa
 ```
 
 Bancos criados por versoes antigas do bot (memoria por usuario, tabela `messages` sem
@@ -40,6 +39,16 @@ python -m app.main
 
 Preencha o `.env` com `DISCORD_TOKEN` e `OPENROUTER_API_KEY` (obrigatorios) e, opcionalmente,
 `CRW_API_KEY` para as ferramentas de busca/leitura de paginas.
+
+## Testes
+
+Cobrem as partes deterministicas (`app/utils` e os blocos fixos do prompt): formatacao
+da resposta e data/hora. Nao precisam de token, rede nem banco.
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ## Docker / CasaOS
 
@@ -106,11 +115,20 @@ para quando ele for chamado. Coloque `AMBIENT_CONTEXT_MESSAGES=0` para desligar 
 
 ## Tom
 
-O bot trabalha sempre em registro serio e profissional, e isso nao e configuravel por
-quem usa: nao ha comando de modo/persona. A regra de tom e um bloco fixo anexado
-depois do `SYSTEM_PROMPT`, entao prevalece sobre o que estiver na env var e sobre
-pedidos no chat ("seja engracado", "age como se fosse X"). Sem piada, ironia, emoji,
-gíria nem imitacao de personagem - cordial e prestativo, mas sem humor.
+O bot e descontraido: piada, trocadilho, ironia leve, gíria e emoji ocasional fazem
+parte do jeito dele falar, e ele devolve provocacao de quem provoca. Isso nao e um modo
+que se liga e desliga - a regra de tom e um bloco fixo (`PLAYFUL_INSTRUCTIONS`) anexado
+depois do `SYSTEM_PROMPT`, entao prevalece sobre o que estiver na env var.
+
+O humor tem limite, e ele e a parte importante da regra:
+
+- a graca esta no jeito de dizer, nunca no conteudo - o bot nao inventa informacao para
+  render uma piada, e corta o humor quando ele atrapalha a clareza;
+- brincadeira e com a situacao, nunca as custas de quem perguntou, e some quando a
+  pessoa esta frustrada, perdida ou desabafando;
+- piada forcada em toda mensagem cansa: sem gracinha na manga, ele so responde bem;
+- ele nao puxa assunto sozinho nem comenta conversa alheia so para aparecer - continua
+  respondendo apenas quando e chamado.
 
 ## Conversa natural
 
@@ -136,13 +154,13 @@ dados reais, a cada `PRESENCE_ROTATE_SECONDS`. Configuracao em `PRESENCE`, entra
 `tipo:texto` separadas por `|`:
 
 ```bash
-PRESENCE=listening:{prefix}ajuda|watching:{guilds} servidores|watching:{reminders} lembretes agendados
+PRESENCE=listening:{prefix}ajuda|watching:{guilds} servidores
 ```
 
 Tipos: `playing`, `watching`, `listening`, `competing`, `custom` (ou `jogando`,
 `assistindo`, `ouvindo`, `competindo`). Marcadores: `{prefix}`, `{guilds}`,
-`{reminders}`, `{model}`. Uma entrada cujo numero der zero e pulada, para o bot nao
-anunciar "0 lembretes agendados". Entrada mal formada e descartada com aviso no log em
+`{model}`. Uma entrada cujo numero der zero e pulada, para o bot nao anunciar
+"0 servidores". Entrada mal formada e descartada com aviso no log em
 vez de derrubar o boot. `PRESENCE` vazio desliga.
 
 Nao da para fazer Rich Presence completo: o Discord aceita de bots apenas tipo, nome e
@@ -155,9 +173,8 @@ Apagar dados de um canal (`o!reset` e `o!esquecer`) e restrito a quem tem permis
 **administrador**, **gerenciar servidor** ou **gerenciar mensagens** - mais o dono do
 servidor e quem tiver um cargo listado em `ADMIN_ROLES` (nome ou id).
 
-Ler continua livre: `o!memoria`, `o!lembretes`, `o!status`, os botoes do embed,
-conversar e agendar lembrete valem para todo mundo. Cancelar lembrete tambem, mas so
-o proprio.
+Ler continua livre: `o!memoria`, `o!status`, os botoes do embed e conversar valem para
+todo mundo.
 
 A ferramenta `forget_fact` obedece a mesma regra. Sem isso a restricao seria
 decorativa: bastaria pedir "esquece tudo o que voce sabe" na conversa para o modelo
@@ -177,30 +194,12 @@ Sao duas memorias diferentes:
   rotacao do historico e ao `o!reset`; e visivel com `o!memoria` e removivel com
   `o!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
 
-## Lembretes
+## Nada de agendamento
 
-Pedidos em linguagem natural no meio da conversa: "me lembra em 20 minutos de tirar o
-bolo", "me avisa amanha as 9 da reuniao". O modelo chama a ferramenta
-`schedule_reminder` e o bot entrega **no mesmo canal onde foi pedido**, marcando quem
-pediu - inclusive em DM, se foi pedido em DM.
-
-Quem confirma e o codigo, nao o modelo: a resposta so ganha o rodape "Lembrete salvo
-para <horario>" quando existe linha no banco. Se o modelo prometer um lembrete sem
-agendar - acontece com modelo gratuito - o proprio bot avisa que nao deu certo, em vez
-de deixar a pessoa esperando.
-
-Como rede de seguranca, quando o modelo nao agenda o bot interpreta o pedido direto do
-texto ("daqui 1 minuto", "em 20 minutos", "amanha as 9", "as 15:30") e agenda sozinho.
-Isso e trabalho deterministico e nao deveria depender de o modelo estar inspirado.
-
-Os lembretes ficam no SQLite, nao em memoria, entao sobrevivem a restart do container.
-Se o bot estiver fora do ar na hora marcada, o lembrete e entregue assim que ele volta,
-com um aviso de que esta atrasado. `o!reset` **nao** apaga lembretes.
-
-- `o!lembretes` lista os seus, com o numero de cada um.
-- `o!cancelar <numero>` cancela. Ninguem cancela lembrete de outra pessoa.
-- Limites em `MAX_REMINDERS_PER_USER` e `MAX_REMINDER_DAYS`; a frequencia de
-  verificacao em `REMINDER_CHECK_SECONDS`.
+O bot so existe dentro da conversa: ele nao agenda lembretes nem manda mensagem
+sozinho depois. Um bloco fixo do prompt (`NO_SCHEDULING_INSTRUCTIONS` em
+`app/config.py`) proibe prometer "te aviso mais tarde", porque a promessa nunca seria
+cumprida e a pessoa ficaria esperando.
 
 ## Modelos e falhas
 
@@ -284,16 +283,13 @@ Comando com o prefixo ja e um endereco direto ao bot: funciona solto no canal, s
 precisar de `@`, e tambem em DM. Vale so para comando existente - `o!naoexiste` nao
 acorda o bot.
 
-- `o!ajuda` - embed com os comandos e botoes de Memoria, Lembretes, Status e
-  Parar. Clicar responde so para quem clicou (ephemeral), sem digitar comando.
+- `o!ajuda` - embed com os comandos e botoes de Memoria, Status e Parar. Clicar
+  responde so para quem clicou (ephemeral), sem digitar comando.
 - `o!memoria` - lista o que o bot memorizou a longo prazo naquele canal.
 - `o!esquecer <numero>` - apaga um item da memoria de longo prazo (o numero vem do
   `o!memoria`); `o!esquecer tudo` apaga todos, pedindo confirmacao.
-- `o!lembretes` - lista seus lembretes agendados.
-- `o!cancelar <numero>` - cancela um lembrete (o numero vem do `o!lembretes`).
 - `o!parar` (ou `o!tchau`) - encerra a conversa na hora; em DM, silencia ate voce
   chamar pelo nome ou mandar um comando.
-- `o!status` - modo ativo, modelos em uso, tamanho do historico e da memoria, lembretes
-  pendentes, hora atual.
+- `o!status` - modelos em uso, tamanho do historico e da memoria, hora atual.
 - `o!reset` - apaga o historico de conversa daquele canal (pede confirmacao). Nao
-  apaga a memoria de longo prazo nem os lembretes.
+  apaga a memoria de longo prazo.

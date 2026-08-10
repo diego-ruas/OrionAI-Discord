@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Suite de testes das partes puras (app/utils). Nao e necessario para rodar o bot,
+# por isso fica fora do requirements.txt e da imagem Docker.
+pytest>=8.0.0

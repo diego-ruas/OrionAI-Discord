@@ -8,8 +8,8 @@ A configuracao vem de PRESENCE, uma lista separada por "|" no formato "tipo:text
 
     listening:{prefix}ajuda|watching:{guilds} servidores
 
-Marcadores disponiveis: {prefix}, {guilds}, {reminders}, {model}. Uma entrada cujo
-numero der zero e pulada, para o bot nao ficar anunciando "0 lembretes agendados".
+Marcadores disponiveis: {prefix}, {guilds}, {model}. Uma entrada cujo numero der zero
+e pulada, para o bot nao ficar anunciando "0 servidores".
 """
 
 import re
@@ -83,7 +83,7 @@ def render(template, stats):
             print(f"[presenca] Marcador desconhecido: {{{name}}}")
             return None
         value = stats[name]
-        # "0 lembretes agendados" e pior do que nao mostrar nada.
+        # "0 servidores" e pior do que nao mostrar nada.
         if isinstance(value, int) and value == 0:
             return None
 

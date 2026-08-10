@@ -6,7 +6,10 @@ from .config import config
 from .tools import UNTRUSTED_TOOLS, run_tool, tool_definitions
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MAX_TOOL_ITERATIONS = 4
+# Cada iteracao e uma ida ao modelo. Com 4, uma pergunta que exige buscar, abrir duas
+# paginas e conferir um detalhe batia no teto e caia na resposta forcada sem tools -
+# justamente nas perguntas em que pesquisar mais importa.
+MAX_TOOL_ITERATIONS = 6
 
 # Conteudo vindo de ferramentas de internet (paginas da web, resultados de busca) e dado
 # nao confiavel: pode conter texto tentando se passar por instrucao ("ignore as regras

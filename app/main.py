@@ -10,19 +10,14 @@ from .config import config
 from .db import (
     add_ambient_message,
     add_message,
-    cancel_reminder,
     clear_facts,
     clear_history,
     count_messages,
     delete_fact,
     get_ambient_messages,
-    get_due_reminders,
     get_facts,
     get_history,
-    get_pending_reminders,
     is_muted,
-    mark_reminder_delivered,
-    purge_old_reminders,
     set_muted,
 )
 from .openrouter import (
@@ -33,9 +28,8 @@ from .openrouter import (
     generate_vision_reply,
 )
 from .permissions import can_manage, denial_message
-from .tools import create_reminder
-from .utils import ocr, presence, reminder_parser
-from .utils.clock import describe_timestamp, now_description, now_ms
+from .utils import ocr, presence
+from .utils.clock import now_description
 from .utils.image_processor import extract_images, has_images
 from .utils.reply_format import split_reply, truncate_reply, typing_delay
 
@@ -248,18 +242,11 @@ HELP_INTRO = (
     "novo. Se mandar uma imagem junto, eu olho a imagem."
 )
 
-HELP_REMINDERS = (
-    "Pede na conversa mesmo: *\"me lembra em 20 minutos de tirar o bolo\"* ou "
-    "*\"me avisa amanha as 9 da reuniao\"*. Eu aviso neste mesmo canal, te marcando."
-)
-
-
 def _help_sections():
     """Titulo e conteudo de cada bloco da ajuda, ja com o prefixo configurado."""
     p = config.command_prefix
     return [
         ("Como falar comigo", HELP_INTRO),
-        ("Lembretes", HELP_REMINDERS),
         (
             "Conversa",
             f"`{p}parar` - encerrar a conversa na hora (em DM fico calado ate voce me "
@@ -271,12 +258,7 @@ def _help_sections():
             f"`{p}memoria` - ver o que eu lembro deste canal\n"
             f"`{p}esquecer <numero>` - apagar um item (`{p}esquecer tudo` apaga todos)",
         ),
-        (
-            "Lembretes agendados",
-            f"`{p}lembretes` - ver os seus\n"
-            f"`{p}cancelar <numero>` - cancelar um deles",
-        ),
-        ("Diagnostico", f"`{p}status` - modelos, memoria e lembretes pendentes"),
+        ("Diagnostico", f"`{p}status` - modelos e memoria"),
     ]
 
 
@@ -318,8 +300,8 @@ class HelpView(discord.ui.View):
     com client.add_view, os botoes de embeds antigos continuam funcionando depois de um
     restart do container, em vez de morrerem calados.
 
-    Toda resposta e ephemeral - so quem clicou ve. Sao dados pessoais (memoria do canal,
-    lembretes de quem clicou) e nao ha por que poluir o canal com eles.
+    Toda resposta e ephemeral - so quem clicou ve. Sao dados pessoais (a memoria do
+    canal) e nao ha por que poluir o canal com eles.
     """
 
     def __init__(self):
@@ -335,23 +317,12 @@ class HelpView(discord.ui.View):
         )
 
     @discord.ui.button(
-        label="Lembretes", emoji="⏰", style=discord.ButtonStyle.secondary,
-        custom_id="orion:help:lembretes",
-    )
-    async def lembretes(self, interaction, button):
-        await interaction.response.send_message(
-            build_reminders_text(str(interaction.channel_id), interaction.user.id),
-            ephemeral=True,
-        )
-
-    @discord.ui.button(
         label="Status", emoji="📊", style=discord.ButtonStyle.secondary,
         custom_id="orion:help:status",
     )
     async def status(self, interaction, button):
         await interaction.response.send_message(
-            build_status_text(str(interaction.channel_id), interaction.user.id),
-            ephemeral=True,
+            build_status_text(str(interaction.channel_id)), ephemeral=True
         )
 
     @discord.ui.button(
@@ -466,78 +437,23 @@ async def handle_stop_command(message, channel_id):
     await message.reply("Ok, paro por aqui. Me marca com @ quando precisar.")
 
 
-def build_reminders_text(channel_id, user_id):
-    """Texto dos lembretes de uma pessoa, usado pelo comando e pelo botao."""
-    reminders = get_pending_reminders(user_id=str(user_id))
-    if not reminders:
-        return (
-            "Voce nao tem lembretes agendados. Pode me pedir na conversa mesmo, tipo "
-            "\"me lembra em 20 minutos de tirar o bolo do forno\"."
-        )
-
-    lines = []
-    for index, reminder in enumerate(reminders, start=1):
-        when = describe_timestamp(reminder["remind_at"], config.timezone)
-        where = "" if reminder["channel_id"] == channel_id else " (em outro canal)"
-        lines.append(f"{index}. **{when}**{where} - {reminder['text']}")
-
-    body = "\n".join(lines)
-    return (
-        f"Seus lembretes:\n{body}\n\n"
-        f"-# Use `{config.command_prefix}cancelar <numero>` para cancelar um deles."
-    )[:2000]
-
-
-async def handle_reminders_command(message, channel_id):
-    await message.reply(build_reminders_text(channel_id, message.author.id))
-
-
-async def handle_cancel_command(message, text):
-    parts = text.split(maxsplit=1)
-    argument = parts[1].strip() if len(parts) > 1 else ""
-
-    if not argument.isdigit():
-        await message.reply(
-            f"Use `{config.command_prefix}cancelar <numero>`, com o numero que aparece "
-            f"em `{config.command_prefix}lembretes`."
-        )
-        return
-
-    reminders = get_pending_reminders(user_id=str(message.author.id))
-    position = int(argument)
-    if position < 1 or position > len(reminders):
-        await message.reply(
-            f"Nao existe lembrete {position}. Voce tem {len(reminders)} agendado(s)."
-        )
-        return
-
-    target = reminders[position - 1]
-    # cancel_reminder confere o dono, entao ninguem cancela lembrete de outra pessoa.
-    if cancel_reminder(target["id"], str(message.author.id)):
-        await message.reply(f"Cancelado: {target['text']}")
-    else:
-        await message.reply("Esse lembrete ja nao estava mais pendente.")
-
-
-def build_status_text(channel_id, user_id):
+def build_status_text(channel_id):
     fact_count = len(get_facts(channel_id))
     stored = count_messages(channel_id)
     ambient = len(get_ambient_messages(channel_id, config.ambient_context_messages))
 
-    pendentes = len(get_pending_reminders(user_id=str(user_id)))
     return (
         f"Modelo de texto: `{config.model}`\n"
         f"Modelo de imagem: `{config.vision_model}`\n"
         f"Historico deste canal: {stored}/{config.memory_max_messages} mensagens\n"
         f"Memoria de longo prazo: {fact_count}/{config.max_facts_per_channel} itens\n"
         f"Contexto do canal captado: {ambient} mensagens\n"
-        f"Seus lembretes pendentes: {pendentes}/{config.max_reminders_per_user}\n"
         f"Agora: {now_description(config.timezone)}"
     )
 
 
 async def handle_status_command(message, channel_id):
-    await message.reply(build_status_text(channel_id, message.author.id))
+    await message.reply(build_status_text(channel_id))
 
 
 # Nomes dos comandos sem o prefixo: ele e configuravel (config.command_prefix), entao
@@ -549,8 +465,6 @@ COMMAND_NAMES = (
     "memoria",
     "esquecer",
     "status",
-    "lembretes",
-    "cancelar",
     "parar",
     "tchau",
 )
@@ -600,10 +514,6 @@ async def handle_command(message, channel_id, text):
         await handle_forget_command(message, channel_id, text)
     elif command == "status":
         await handle_status_command(message, channel_id)
-    elif command == "lembretes":
-        await handle_reminders_command(message, channel_id)
-    elif command == "cancelar":
-        await handle_cancel_command(message, text)
     elif command in ("parar", "tchau"):
         await handle_stop_command(message, channel_id)
 
@@ -667,75 +577,13 @@ def format_history(history):
     return formatted
 
 
-# A pessoa pedindo lembrete, e o modelo dizendo que agendou. As duas coisas juntas, sem
-# lembrete no banco, significam que o modelo prometeu sem chamar a ferramenta.
-_PEDIDO_DE_LEMBRETE = re.compile(
-    r"\bme\s+(lembr|avis)|\blembrete\b|\bme\s+acord", re.IGNORECASE
-)
-_PROMESSA_DE_LEMBRETE = re.compile(
-    r"\b(vou|irei)\s+(te\s+)?(lembrar|avisar)|\blembrete\s+(agendad|criad|marcad)"
-    r"|\banotad[oa]\b|\bte\s+aviso\b|\bpode\s+deixar\b",
-    re.IGNORECASE,
-)
-
-
-def reminder_promise_broken(user_text, reply, created):
-    """True quando o modelo prometeu um lembrete que nao existe no banco.
-
-    Exige os dois sinais - pedido do usuario e promessa na resposta - para nao acusar
-    falsamente quem so estava conversando sobre lembretes.
-    """
-    if created:
-        return False
-    return bool(
-        _PEDIDO_DE_LEMBRETE.search(user_text or "")
-        and _PROMESSA_DE_LEMBRETE.search(reply or "")
-    )
-
-
-def rescue_reminder(text, tool_context):
-    """Agenda a partir do texto quando o modelo pediu para nao chamar a ferramenta.
-
-    Interpretar "daqui 1 minuto" e trabalho deterministico; deixar isso na mao de um
-    modelo gratuito significa a pessoa perder o lembrete quando ele resolve so dizer
-    "pode deixar". So roda se nada foi agendado pelo caminho normal.
-    """
-    pedido = reminder_parser.parse(text, config.timezone)
-    if not pedido:
-        return None
-
-    remind_at, assunto = pedido
-    try:
-        resultado = create_reminder(tool_context, assunto, remind_at)
-    except Exception as err:  # noqa: BLE001 - nunca derrubar a resposta por causa disso
-        print(f"[lembretes] Rede de seguranca falhou: {err}")
-        return None
-
-    criados = tool_context.get("created_reminders") or []
-    if criados:
-        print(f"[lembretes] Modelo nao agendou; salvo pelo texto: {assunto!r}")
-        return criados[-1]
-
-    print(f"[lembretes] Rede de seguranca nao agendou: {resultado}")
-    return None
-
-
-# Rodapes que so o codigo pode escrever. Se aparecerem no texto do modelo, e porque ele
-# copiou de uma resposta anterior - o que ja fez o bot exibir "nao consegui agendar" e
-# "lembrete salvo" na mesma mensagem.
+# Rodapes que so o codigo escreve. Se aparecerem no texto do modelo, e porque ele copiou
+# de uma resposta anterior que estava no historico - sai antes de ir para o Discord.
 _RODAPE_DO_CODIGO = re.compile(r"^\s*-#\s*(⏰|⚠️).*$", re.MULTILINE)
 
 
 def strip_code_footers(texto):
     return _RODAPE_DO_CODIGO.sub("", texto or "").rstrip()
-
-
-def format_reminder_footer(created):
-    """Confirmacao escrita pelo codigo, a partir do que foi mesmo gravado."""
-    if len(created) == 1:
-        return f"\n-# ⏰ Lembrete salvo para {created[0]['when']}."
-    itens = "; ".join(f"{c['text']} ({c['when']})" for c in created)
-    return f"\n-# ⏰ {len(created)} lembretes salvos: {itens}"
 
 
 def read_images_locally(images):
@@ -829,80 +677,6 @@ def build_current_content(message, text, replied_to, image_names):
     return content
 
 
-# --- Lembretes ---
-
-# Um dia depois de entregue, o lembrete sai da tabela.
-REMINDER_RETENTION_MS = 86_400_000
-
-
-async def _resolve_reminder_destination(reminder):
-    """Acha onde entregar o lembrete: o canal original ou, em ultimo caso, a DM."""
-    channel_id = int(reminder["channel_id"])
-    channel = client.get_channel(channel_id)
-    if channel is not None:
-        return channel
-
-    # Canal fora do cache (comum para DMs depois de um restart).
-    try:
-        return await client.fetch_channel(channel_id)
-    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as err:
-        print(f"[lembretes] Canal {channel_id} inacessivel ({err}), tentando DM.")
-
-    try:
-        user = client.get_user(int(reminder["user_id"])) or await client.fetch_user(
-            int(reminder["user_id"])
-        )
-        return user
-    except (discord.NotFound, discord.HTTPException) as err:
-        print(f"[lembretes] Usuario {reminder['user_id']} inacessivel: {err}")
-        return None
-
-
-async def deliver_reminder(reminder):
-    destination = await _resolve_reminder_destination(reminder)
-    if destination is None:
-        # Marca como entregue mesmo sem conseguir enviar, senao o loop tenta para sempre.
-        mark_reminder_delivered(reminder["id"])
-        print(f"[lembretes] Descartado {reminder['id']}: sem destino acessivel.")
-        return
-
-    late_by = now_ms() - reminder["remind_at"]
-    message = f"<@{reminder['user_id']}> lembrete: {reminder['text']}"
-    # Se o bot estava fora do ar na hora, avisa que esta chegando atrasado em vez de
-    # fingir que o horario foi cumprido.
-    if late_by > 5 * 60_000:
-        message += (
-            f"\n-# (era para {describe_timestamp(reminder['remind_at'], config.timezone)}, "
-            "mas eu estava fora do ar)"
-        )
-
-    try:
-        await destination.send(message)
-    except (discord.Forbidden, discord.HTTPException) as err:
-        print(f"[lembretes] Falha ao entregar {reminder['id']}: {err}")
-        # Nao marca como entregue: erro pode ser temporario, tenta na proxima rodada.
-        return
-
-    mark_reminder_delivered(reminder["id"])
-
-
-@tasks.loop(seconds=30)
-async def reminder_loop():
-    try:
-        due = get_due_reminders(now_ms())
-        for reminder in due:
-            await deliver_reminder(reminder)
-        if due:
-            purge_old_reminders(now_ms() - REMINDER_RETENTION_MS)
-    except Exception as err:  # noqa: BLE001 - o loop nunca pode morrer
-        print(f"[lembretes] Erro no loop de entrega: {err}")
-
-
-@reminder_loop.before_loop
-async def _before_reminder_loop():
-    await client.wait_until_ready()
-
-
 # --- Presenca ---
 
 _presence_entries = presence.parse_spec(config.presence)
@@ -914,7 +688,6 @@ def presence_stats():
     return {
         "prefix": config.command_prefix,
         "guilds": len(client.guilds),
-        "reminders": len(get_pending_reminders()),
         "model": config.model.split("/")[-1].replace(":free", ""),
     }
 
@@ -968,15 +741,6 @@ async def on_ready():
         )
     elif not _presence_entries:
         print("[presenca] Desligada (PRESENCE vazio ou sem entradas validas).")
-
-    if not reminder_loop.is_running():
-        reminder_loop.change_interval(seconds=config.reminder_check_seconds)
-        reminder_loop.start()
-        pending = len(get_pending_reminders())
-        print(
-            f"[lembretes] Loop iniciado (a cada {config.reminder_check_seconds:g}s), "
-            f"{pending} pendente(s)."
-        )
 
 
 @client.event
@@ -1099,28 +863,7 @@ async def on_message(message):
                 # codigo, entao qualquer copia sai antes de decidir o que anexar.
                 reply = strip_code_footers(reply)
                 reply = truncate_reply(reply, config.max_reply_chars)
-
-                # Confirmacao e desmentido escritos pelo codigo, com base no que existe
-                # no banco - o modelo ja prometeu lembrete sem chamar a ferramenta, e
-                # nesse caso a pessoa ficava esperando um aviso que nunca viria.
-                criados = tool_context.get("created_reminders") or []
-                if not criados:
-                    # Rede de seguranca: le o pedido do proprio texto do usuario.
-                    if rescue_reminder(text, tool_context):
-                        criados = tool_context.get("created_reminders") or []
-
-                # O rodape e enfeite de interface: vai para o Discord, mas nao para o
-                # historico. Gravado, o modelo o copiaria na resposta seguinte.
                 enviado = reply
-                if criados:
-                    enviado += format_reminder_footer(criados)
-                elif reminder_promise_broken(text, reply, criados):
-                    print(f"[lembretes] Promessa sem agendamento de {message.author.name}")
-                    enviado += (
-                        "\n-# ⚠️ Nao consegui agendar de verdade. Tenta de novo dizendo "
-                        f"o horario de forma bem direta, ou use `{config.command_prefix}"
-                        "lembretes` para conferir."
-                    )
 
                 # O historico guarda o texto do usuario mais a nota de anexo, pra que numa
                 # proxima mensagem o bot ainda saiba que uma imagem foi enviada antes.
