@@ -1,9 +1,9 @@
+import asyncio
 import base64
 import io
 
-import aiohttp
-
 from ..config import config
+from .http_client import get_session
 
 # Tipos MIME de imagem aceitos por OpenRouter
 ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
@@ -71,40 +71,48 @@ def _shrink(data, content_type):
     return shrunk, "image/jpeg"
 
 
+async def _process_attachment(session, attachment):
+    content_type = getattr(attachment, "content_type", None)
+    if content_type not in ALLOWED_TYPES:
+        return None
+
+    try:
+        async with session.get(attachment.url) as res:
+            if not res.ok:
+                raise RuntimeError(f"HTTP {res.status}")
+            data = await res.read()
+
+        # Processamento no Pillow e CPU-bound: roda em thread dedicada para nao
+        # travar o event loop do Discord.
+        shrunk, mime_type = await asyncio.to_thread(_shrink, data, content_type)
+
+        return {
+            "base64": base64.b64encode(shrunk).decode("ascii"),
+            "mime_type": mime_type,
+            "name": attachment.filename,
+            "data": data,
+        }
+    except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
+        print(f"[imagens] Falha ao baixar {attachment.filename}: {err}")
+        return None
+
+
 async def extract_images(attachments):
-    """Baixa os anexos de imagem e devolve base64 pronto para o modelo de visao.
+    """Baixa os anexos de imagem concorrentemente e devolve base64 pronto para o modelo.
 
     Guarda tambem os bytes crus em 'data', que o OCR usa - o OCR le melhor a imagem
     original do que a versao reduzida.
     """
-    images = []
+    valid_attachments = [
+        a for a in attachments if getattr(a, "content_type", None) in ALLOWED_TYPES
+    ]
+    if not valid_attachments:
+        return []
 
-    async with aiohttp.ClientSession() as session:
-        for attachment in attachments:
-            content_type = getattr(attachment, "content_type", None)
-            if content_type not in ALLOWED_TYPES:
-                continue
-
-            try:
-                async with session.get(attachment.url) as res:
-                    if not res.ok:
-                        raise RuntimeError(f"HTTP {res.status}")
-                    data = await res.read()
-
-                shrunk, mime_type = _shrink(data, content_type)
-
-                images.append(
-                    {
-                        "base64": base64.b64encode(shrunk).decode("ascii"),
-                        "mime_type": mime_type,
-                        "name": attachment.filename,
-                        "data": data,
-                    }
-                )
-            except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
-                print(f"[imagens] Falha ao baixar {attachment.filename}: {err}")
-
-    return images
+    session = await get_session()
+    tasks = [_process_attachment(session, a) for a in valid_attachments]
+    results = await asyncio.gather(*tasks)
+    return [r for r in results if r is not None]
 
 
 def has_images(attachments):

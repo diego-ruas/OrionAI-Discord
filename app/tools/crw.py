@@ -1,6 +1,5 @@
-import aiohttp
-
 from ..config import config
+from ..utils.http_client import get_session
 
 BASE_URL = "https://api.fastcrw.com/v1"
 
@@ -12,16 +11,16 @@ async def _crw_request(path, body):
             "adicione a key no .env."
         )
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            f"{BASE_URL}{path}",
-            json=body,
-            headers={"Authorization": f"Bearer {config.crw_api_key}"},
-        ) as res:
-            if not res.ok:
-                text = await res.text()
-                raise RuntimeError(f"fastCRW respondeu {res.status} em {path}: {text}")
-            return await res.json()
+    session = await get_session()
+    async with session.post(
+        f"{BASE_URL}{path}",
+        json=body,
+        headers={"Authorization": f"Bearer {config.crw_api_key}"},
+    ) as res:
+        if not res.ok:
+            text = await res.text()
+            raise RuntimeError(f"fastCRW respondeu {res.status} em {path}: {text}")
+        return await res.json()
 
 
 async def web_search(query, max_results=5):

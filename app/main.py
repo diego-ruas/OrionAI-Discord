@@ -57,7 +57,11 @@ _last_engagement = {}
 async def with_user_lock(user_id, fn):
     lock = _locks_by_user.setdefault(user_id, asyncio.Lock())
     async with lock:
-        return await fn()
+        try:
+            return await fn()
+        finally:
+            if not lock.locked() and user_id in _locks_by_user:
+                _locks_by_user.pop(user_id, None)
 
 
 def _mark_engagement(channel_id, user_id):
@@ -85,11 +89,24 @@ def _in_followup_window(channel_id, user_id):
     return (time.monotonic() - last) <= config.followup_window_seconds
 
 
+_bot_name_pattern = None
+_cached_bot_names = None
+
+
 def _mentions_bot_by_name(content):
-    lowered = content.lower()
-    return any(
-        re.search(rf"\b{re.escape(name)}\b", lowered) for name in config.bot_names
-    )
+    global _bot_name_pattern, _cached_bot_names
+    if _cached_bot_names != config.bot_names:
+        _cached_bot_names = list(config.bot_names)
+        if _cached_bot_names:
+            escaped = "|".join(re.escape(name) for name in _cached_bot_names)
+            _bot_name_pattern = re.compile(rf"\b({escaped})\b", re.IGNORECASE)
+        else:
+            _bot_name_pattern = None
+
+    if not _bot_name_pattern:
+        return False
+
+    return bool(_bot_name_pattern.search(content))
 
 
 def _looks_like_command(content):
@@ -586,8 +603,8 @@ def strip_code_footers(texto):
     return _RODAPE_DO_CODIGO.sub("", texto or "").rstrip()
 
 
-def read_images_locally(images):
-    """Roda o OCR local em cada imagem e devolve os textos que valem a pena usar.
+async def read_images_locally(images):
+    """Roda o OCR local em cada imagem em threadpool para nao travar o event loop.
 
     Roda antes de qualquer chamada de rede: quando a imagem e um print de codigo ou de
     conversa - o caso mais comum no Discord - o texto lido aqui ja responde a pergunta,
@@ -596,6 +613,10 @@ def read_images_locally(images):
     if not ocr.available():
         return []
 
+    return await asyncio.to_thread(_read_images_locally_sync, images)
+
+
+def _read_images_locally_sync(images):
     blocks = []
     for image in images:
         found = ocr.extract_text(image.get("data") or b"")
@@ -790,7 +811,7 @@ async def on_message(message):
     if has_images(message.attachments):
         images = await extract_images(message.attachments)
         image_names = [img["name"] for img in images]
-        ocr_blocks = read_images_locally(images)
+        ocr_blocks = await read_images_locally(images)
 
     if not text and not images:
         return

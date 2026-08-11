@@ -8,6 +8,8 @@ DB_PATH = os.path.join(DATA_DIR, "memory.sqlite")
 
 _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 _conn.execute("PRAGMA journal_mode=WAL")
+_conn.execute("PRAGMA synchronous=NORMAL")
+_conn.execute("PRAGMA temp_store=MEMORY")
 
 
 def _migrate_legacy_messages(conn):
@@ -38,7 +40,7 @@ def _migrate_legacy_messages(conn):
         suffix += 1
     legacy_name = f"messages_legacy_v{suffix}"
 
-    # Os indices acompanham a tabela renomeada e continuariam ocupando os nomes que o
+    # Os indices acompanham a tabela renomeada e continuaria ocupando os nomes que o
     # schema novo usa, fazendo o CREATE INDEX IF NOT EXISTS ser silenciosamente ignorado.
     for (index_name,) in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='messages' "
@@ -108,20 +110,20 @@ def _now_ms():
 
 
 def add_message(channel_id, user_id, username, role, content, max_messages):
-    _conn.execute(
-        "INSERT INTO messages (channel_id, user_id, username, role, content, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (channel_id, user_id, username, role, content, _now_ms()),
-    )
-    _conn.execute(
-        """
-        DELETE FROM messages WHERE channel_id = ? AND id NOT IN (
-            SELECT id FROM messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+    with _conn:
+        _conn.execute(
+            "INSERT INTO messages (channel_id, user_id, username, role, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (channel_id, user_id, username, role, content, _now_ms()),
         )
-        """,
-        (channel_id, channel_id, max_messages),
-    )
-    _conn.commit()
+        _conn.execute(
+            """
+            DELETE FROM messages WHERE channel_id = ? AND id NOT IN (
+                SELECT id FROM messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (channel_id, channel_id, max_messages),
+        )
 
 
 def get_history(channel_id, max_messages):
@@ -150,9 +152,9 @@ def count_messages(channel_id):
 
 
 def clear_history(channel_id):
-    _conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,))
-    _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
-    _conn.commit()
+    with _conn:
+        _conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,))
+        _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
 
 
 # --- Memoria de longo prazo (fatos) ---
@@ -171,21 +173,21 @@ def add_fact(channel_id, subject, fact, max_facts):
     if existing:
         return False
 
-    _conn.execute(
-        "INSERT INTO facts (channel_id, subject, fact, created_at) VALUES (?, ?, ?, ?)",
-        (channel_id, (subject or "").strip() or None, fact, _now_ms()),
-    )
-    # Mantem apenas os mais recentes, pra memoria nao crescer sem limite nem estourar
-    # o prompt de sistema.
-    _conn.execute(
-        """
-        DELETE FROM facts WHERE channel_id = ? AND id NOT IN (
-            SELECT id FROM facts WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+    with _conn:
+        _conn.execute(
+            "INSERT INTO facts (channel_id, subject, fact, created_at) VALUES (?, ?, ?, ?)",
+            (channel_id, (subject or "").strip() or None, fact, _now_ms()),
         )
-        """,
-        (channel_id, channel_id, max_facts),
-    )
-    _conn.commit()
+        # Mantem apenas os mais recentes, pra memoria nao crescer sem limite nem estourar
+        # o prompt de sistema.
+        _conn.execute(
+            """
+            DELETE FROM facts WHERE channel_id = ? AND id NOT IN (
+                SELECT id FROM facts WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (channel_id, channel_id, max_facts),
+        )
     return True
 
 
@@ -203,27 +205,30 @@ def forget_facts(channel_id, query):
     if not query:
         return 0
 
-    cursor = _conn.execute(
-        "DELETE FROM facts WHERE channel_id = ? AND "
-        "(fact LIKE ? COLLATE NOCASE OR subject LIKE ? COLLATE NOCASE)",
-        (channel_id, f"%{query}%", f"%{query}%"),
-    )
-    _conn.commit()
-    return cursor.rowcount
+    with _conn:
+        cursor = _conn.execute(
+            "DELETE FROM facts WHERE channel_id = ? AND "
+            "(fact LIKE ? COLLATE NOCASE OR subject LIKE ? COLLATE NOCASE)",
+            (channel_id, f"%{query}%", f"%{query}%"),
+        )
+        removed = cursor.rowcount
+    return removed
 
 
 def delete_fact(channel_id, fact_id):
-    cursor = _conn.execute(
-        "DELETE FROM facts WHERE channel_id = ? AND id = ?", (channel_id, fact_id)
-    )
-    _conn.commit()
-    return cursor.rowcount > 0
+    with _conn:
+        cursor = _conn.execute(
+            "DELETE FROM facts WHERE channel_id = ? AND id = ?", (channel_id, fact_id)
+        )
+        removed = cursor.rowcount
+    return removed > 0
 
 
 def clear_facts(channel_id):
-    cursor = _conn.execute("DELETE FROM facts WHERE channel_id = ?", (channel_id,))
-    _conn.commit()
-    return cursor.rowcount
+    with _conn:
+        cursor = _conn.execute("DELETE FROM facts WHERE channel_id = ?", (channel_id,))
+        removed = cursor.rowcount
+    return removed
 
 
 # --- Contexto ambiente (conversa do canal sem o bot) ---
@@ -233,20 +238,20 @@ def add_ambient_message(channel_id, username, content, max_messages):
     if max_messages <= 0:
         return
 
-    _conn.execute(
-        "INSERT INTO ambient_messages (channel_id, username, content, created_at) "
-        "VALUES (?, ?, ?, ?)",
-        (channel_id, username, content, _now_ms()),
-    )
-    _conn.execute(
-        """
-        DELETE FROM ambient_messages WHERE channel_id = ? AND id NOT IN (
-            SELECT id FROM ambient_messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+    with _conn:
+        _conn.execute(
+            "INSERT INTO ambient_messages (channel_id, username, content, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (channel_id, username, content, _now_ms()),
         )
-        """,
-        (channel_id, channel_id, max_messages),
-    )
-    _conn.commit()
+        _conn.execute(
+            """
+            DELETE FROM ambient_messages WHERE channel_id = ? AND id NOT IN (
+                SELECT id FROM ambient_messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (channel_id, channel_id, max_messages),
+        )
 
 
 def get_ambient_messages(channel_id, max_messages):
@@ -263,23 +268,23 @@ def get_ambient_messages(channel_id, max_messages):
 
 
 def clear_ambient_messages(channel_id):
-    _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
-    _conn.commit()
+    with _conn:
+        _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
 
 
 # --- Modo silencioso ---
 
 
 def set_muted(channel_id, muted):
-    if muted:
-        _conn.execute(
-            "INSERT INTO muted_channels (channel_id, muted_at) VALUES (?, ?) "
-            "ON CONFLICT(channel_id) DO UPDATE SET muted_at = excluded.muted_at",
-            (channel_id, _now_ms()),
-        )
-    else:
-        _conn.execute("DELETE FROM muted_channels WHERE channel_id = ?", (channel_id,))
-    _conn.commit()
+    with _conn:
+        if muted:
+            _conn.execute(
+                "INSERT INTO muted_channels (channel_id, muted_at) VALUES (?, ?) "
+                "ON CONFLICT(channel_id) DO UPDATE SET muted_at = excluded.muted_at",
+                (channel_id, _now_ms()),
+            )
+        else:
+            _conn.execute("DELETE FROM muted_channels WHERE channel_id = ?", (channel_id,))
 
 
 def is_muted(channel_id):

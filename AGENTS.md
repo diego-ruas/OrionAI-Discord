@@ -24,6 +24,7 @@ app/
     crw.py            # integracao com fastCRW (web_search / fetch_page)
   utils/
     clock.py          # hora local da conversa (TIMEZONE)
+    http_client.py    # sessao HTTP compartilhada (Keep-Alive) para APIs e downloads
     image_processor.py# extracao/base64/recompressao de anexos de imagem
     ocr.py            # OCR local via tesseract (degrada sozinho se ausente)
     presence.py       # status/presenca do bot
@@ -85,6 +86,13 @@ Antes de dar uma mudanca como pronta:
   (o codigo atual nao usa) e sem framework extra.
 - `async`/`await` em todo I/O dentro do loop do discord.py. Nada de chamada
   bloqueante no event loop.
+- **Reuso de conexao HTTP:** usar `http_client.get_session()` em vez de instanciar
+  `aiohttp.ClientSession()` local para chamadas de API e downloads.
+- **Offloading CPU-bound:** tarefas pesadas como redimensionar imagem (Pillow em
+  `image_processor.py`) ou extrair OCR (`ocr.py`) devem rodar via `asyncio.to_thread`
+  para nao travar o event loop.
+- **Transacoes SQLite:** usar `with _conn:` em escritas para garantir transacao
+  atomica e menor custo de I/O de disco.
 - Nomes de comando ficam em `COMMAND_NAMES` (`app/main.py`); o prefixo e
   configuravel (`config.command_prefix`), entao nunca escreva o prefixo cru em
   mensagem ao usuario — interpole `prefix`.
