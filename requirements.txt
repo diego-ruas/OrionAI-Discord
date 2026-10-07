@@ -12,3 +12,7 @@ Pillow>=12.3.0,<13
 # OCR local: le o texto da imagem sem mandar nada para fora. Precisa do binario
 # tesseract-ocr instalado no sistema (ver Dockerfile); sem ele o OCR se desliga sozinho.
 pytesseract>=0.3.13,<0.4
+# Extrai o texto principal de uma pagina (app/utils/html_text.py), usado na leitura de
+# paginas quando SEARXNG_URL esta ligado. Sem ela o bot usa um extrator simples, que
+# funciona mas traz mais ruido (menus, rodapes).
+trafilatura>=2.0.0,<3

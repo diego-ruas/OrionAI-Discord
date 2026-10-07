@@ -10,6 +10,9 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       CRW_API_KEY: ${CRW_API_KEY:-}
+      # Busca no SearXNG da stack e leitura de paginas no proprio bot (sem fastCRW). Para
+      # usar o fastCRW, tire os servicos searxng* e esta variavel do compose.
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
       # Vazio = padrao de app/config.py (fonte unica dos defaults de modelo).
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       VISION_MODEL: ${VISION_MODEL:-}
@@ -47,6 +50,8 @@ services:
       SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce conversa com as pessoas de um servidor do Discord. Responda em portugues, num tom leve e bem-humorado, como alguem que e boa companhia no chat e por acaso tambem sabe das coisas. Va direto ao ponto - evite texto em excesso quando uma resposta curta resolve; quando o assunto exigir mais detalhe, de o detalhe, usando paragrafos curtos em vez de um bloco unico de texto.}
     volumes:
       - ./data:/app/data
+    depends_on:
+      - searxng
     x-casaos:
       envs:
         - container: DISCORD_TOKEN
@@ -77,3 +82,42 @@ services:
         en_us: OrionAI
       category: Utilities
       port_map: ""
+
+  # Busca propria do bot (web_search). So o bot enxerga: sem `ports`, fica na rede
+  # interna da stack. O settings.yml e gerado pelo searxng-init porque o SearXNG vem
+  # com o formato json desligado e o bot precisa dele.
+  searxng-init:
+    image: alpine:3
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        SECRET=$$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        cat > /cfg/settings.yml <<EOF
+        use_default_settings: true
+        server:
+          secret_key: "$$SECRET"
+          limiter: false
+          image_proxy: false
+        search:
+          formats:
+            - html
+            - json
+        EOF
+    volumes:
+      - searxng-config:/cfg
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: orionai-searxng
+    restart: unless-stopped
+    depends_on:
+      searxng-init:
+        condition: service_completed_successfully
+    volumes:
+      - searxng-config:/etc/searxng
+    mem_limit: 512m
+
+volumes:
+  searxng-config:

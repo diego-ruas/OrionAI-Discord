@@ -13,9 +13,11 @@ _USER_MENTION = re.compile(r"<@!?(\d+)>")
 def validate_fetch_url(url):
     """Valida a URL pedida ao fetch_page; levanta ValueError se nao for segura.
 
-    A requisicao sai do fastCRW, nao do host do bot, entao o risco aqui nao e SSRF e sim
-    exfiltracao: um modelo induzido por injecao pode embutir dados do contexto na URL de
-    um servidor do atacante. Por isso a URL e curta, so http(s) e sem IP/localhost.
+    Com a busca local (SEARXNG_URL) a requisicao sai do host do bot, entao aqui tambem e
+    barreira de SSRF (o resto esta em app/tools/webfetch.py). Em qualquer caso ha o
+    risco de exfiltracao: um modelo induzido por injecao pode embutir dados do contexto
+    na URL de um servidor do atacante. Por isso a URL e curta, so http(s) e sem
+    IP/localhost.
     """
     if not isinstance(url, str) or not url.strip():
         raise ValueError("URL vazia.")
@@ -45,6 +47,38 @@ def validate_search_query(query):
     if not isinstance(query, str) or not query.strip():
         raise ValueError("Consulta vazia.")
     return query.strip()[:MAX_QUERY_CHARS]
+
+
+def is_public_ip(address):
+    """True so para enderecos roteaveis na internet. Bloqueia loopback, rede privada,
+    link-local (inclui o endpoint de metadados 169.254.169.254), CGNAT e multicast.
+    IPv6 mapeado de IPv4 (::ffff:10.0.0.1) e avaliado pelo IPv4 embutido."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    return ip.is_global and not ip.is_multicast
+
+
+def parse_search_results(data, max_results):
+    """Reduz a resposta JSON do SearXNG a titulo, url e um trecho curto."""
+    results = []
+    for r in data.get("results") or []:
+        if not isinstance(r, dict) or not r.get("url"):
+            continue
+        results.append(
+            {
+                "title": str(r.get("title") or "")[:200],
+                "url": str(r["url"]),
+                "snippet": " ".join(str(r.get("content") or "").split())[:250],
+            }
+        )
+        if len(results) >= max_results:
+            break
+    return results
 
 
 def escape_like(text):

@@ -21,7 +21,9 @@ app/
   permissions.py      # quem pode executar operacoes destrutivas
   tools/
     __init__.py       # definicoes e execucao das tools expostas ao modelo
-    crw.py            # integracao com fastCRW (web_search / fetch_page)
+    crw.py            # busca/leitura de paginas via fastCRW
+    searxng.py        # busca via SearXNG proprio
+    webfetch.py       # leitura de paginas no proprio bot (protecao de SSRF)
   utils/
     clock.py          # hora local da conversa (TIMEZONE)
     http_client.py    # sessao HTTP compartilhada (Keep-Alive) para APIs e downloads
@@ -44,8 +46,10 @@ copy .env.example .env
 python -m app.main
 ```
 
-- Obrigatorios no `.env`: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`. `CRW_API_KEY` habilita
-  busca/leitura de paginas.
+- Obrigatorios no `.env`: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`. `SEARXNG_URL` (SearXNG
+  proprio, sobe no compose) ou `CRW_API_KEY` (fastCRW) habilitam busca/leitura de paginas.
+  Com `SEARXNG_URL` a leitura de pagina sai do host do bot: toda URL passa por
+  `validate_fetch_url` e pela sessao `get_public_session`, que recusa IP nao publico.
 - Toda nova env var deve ser documentada em `.env.example` (com comentario explicando
   o efeito e o default) e lida em `app/config.py` — nunca com `os.environ` espalhado
   pelo codigo.

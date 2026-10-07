@@ -1,7 +1,8 @@
 import json
 
+from ..config import config
 from ..db import forget_facts
-from .crw import fetch_page, web_search
+from . import crw, searxng, webfetch
 
 # Ferramentas cujo resultado vem da internet: conteudo nao confiavel, que precisa ser
 # isolado com marcadores antes de voltar para o modelo (ver app/openrouter.py).
@@ -69,12 +70,16 @@ tool_definitions = [
 async def run_tool(name, args, context=None):
     context = context or {}
 
+    # SEARXNG_URL ligado: busca no SearXNG do proprio NAS e leitura de pagina feita
+    # aqui mesmo (app/tools/webfetch.py). Desligado: fastCRW, como antes.
     if name == "web_search":
-        results = await web_search(args.get("query"))
+        search = searxng.web_search if config.searxng_url else crw.web_search
+        results = await search(args.get("query"))
         return json.dumps(results, ensure_ascii=False)
 
     if name == "fetch_page":
-        return await fetch_page(args.get("url"))
+        fetch = webfetch.fetch_page if config.searxng_url else crw.fetch_page
+        return await fetch(args.get("url"))
 
     if name == "forget_fact":
         channel_id = context.get("channel_id")

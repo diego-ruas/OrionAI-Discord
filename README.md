@@ -18,7 +18,9 @@ app/
   permissions.py       # quem pode executar operacoes destrutivas
   tools/
     __init__.py        # tools: web_search, fetch_page, forget_fact
-    crw.py              # integracao com fastCRW
+    crw.py              # busca/leitura de paginas via fastCRW
+    searxng.py          # busca via SearXNG proprio
+    webfetch.py         # leitura de paginas feita no proprio bot, com protecao de SSRF
   utils/
     clock.py            # data/hora local da conversa
     http_client.py      # sessao HTTP compartilhada (Keep-Alive)
@@ -43,8 +45,9 @@ copy .env.example .env
 python -m app.main
 ```
 
-Preencha o `.env` com `DISCORD_TOKEN` e `OPENROUTER_API_KEY` (obrigatorios) e, opcionalmente,
-`CRW_API_KEY` para as ferramentas de busca/leitura de paginas.
+Preencha o `.env` com `DISCORD_TOKEN` e `OPENROUTER_API_KEY` (obrigatorios). Para as
+ferramentas de busca/leitura de paginas, use `SEARXNG_URL` (SearXNG proprio, sem chave) ou
+`CRW_API_KEY` (fastCRW).
 
 ## Testes
 
@@ -226,6 +229,10 @@ Sao duas memorias diferentes:
   checado antes de baixar imagem, rodar OCR ou chamar o modelo.
 - `fetch_page` so aceita URL http(s) curta, sem IP literal, localhost, porta fora de
   80/443 ou credenciais; no maximo 3 chamadas de ferramenta por rodada.
+- Com `SEARXNG_URL` (padrao do compose) o bot le paginas a partir do proprio host, entao
+  a leitura e fechada para a rede interna: sessao propria que recusa, ja na resolucao de
+  DNS, host que aponte para IP privado, loopback ou link-local; redirecionamentos sao
+  seguidos a mao e revalidados; so `text/html` e `text/plain`, ate 2 MB e 20s.
 - `forget_fact` (ferramenta) recusa consulta com menos de 3 caracteres ou que case com
   mais de 3 fatos; o curinga `%`/`_` do LIKE e escapado.
 - Uma resposta menciona no maximo 3 usuarios; `o!memoria` e `Esqueci:` nunca mencionam.
