@@ -18,6 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app
 
+# Sem root: Pillow e Tesseract abrem imagem enviada por qualquer pessoa.
+RUN useradd --system --uid 1000 --no-create-home bot \
+    && mkdir -p /app/data && chown bot /app/data
+USER bot
+
 VOLUME ["/app/data"]
 
 CMD ["python", "-m", "app.main"]

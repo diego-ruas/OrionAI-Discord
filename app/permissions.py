@@ -28,7 +28,12 @@ def can_manage(author, channel):
     if isinstance(channel, discord.DMChannel):
         return True
 
-    perms = getattr(author, "guild_permissions", None)
+    # Permissao no canal, nao so no servidor: os dados do bot sao por canal, entao um
+    # overwrite de canal concedendo ou negando gerenciar mensagens tem que valer.
+    if isinstance(author, discord.Member) and hasattr(channel, "permissions_for"):
+        perms = channel.permissions_for(author)
+    else:
+        perms = getattr(author, "guild_permissions", None)
     if perms is not None:
         # administrator cobre tudo; manage_guild e manage_messages sao o que
         # normalmente distingue moderacao de membro comum.

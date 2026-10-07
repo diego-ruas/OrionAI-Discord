@@ -10,17 +10,21 @@ O repositorio ja se chamou `NovoBotRoberto`; os identificadores Docker usam
 
 ```
 app/
-  main.py            # cliente discord.py e loop de mensagens
+  main.py            # cliente discord.py, comandos e loop de mensagens
   config.py           # variaveis de ambiente e blocos fixos do prompt
   db.py               # SQLite: historico, fatos e contexto do canal
   openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
+  permissions.py       # quem pode executar operacoes destrutivas
   tools/
     __init__.py        # tools: web_search, fetch_page, remember_fact, forget_fact
     crw.py              # integracao com fastCRW
   utils/
-    image_processor.py  # download/base64 de anexos de imagem
-    reply_format.py     # corte limpo e quebra da resposta em varias mensagens
     clock.py            # data/hora local da conversa
+    http_client.py      # sessao HTTP compartilhada (Keep-Alive)
+    image_processor.py  # download/base64 de anexos de imagem
+    ocr.py              # OCR local via tesseract
+    presence.py         # status/presenca do bot
+    reply_format.py     # corte limpo e quebra da resposta em varias mensagens
 ```
 
 Bancos criados por versoes antigas do bot (memoria por usuario, tabela `messages` sem
@@ -42,8 +46,9 @@ Preencha o `.env` com `DISCORD_TOKEN` e `OPENROUTER_API_KEY` (obrigatorios) e, o
 
 ## Testes
 
-Cobrem as partes deterministicas (`app/utils` e os blocos fixos do prompt): formatacao
-da resposta e data/hora. Nao precisam de token, rede nem banco.
+Cobrem as partes deterministicas: formatacao da resposta (`reply_format`), data/hora
+(`clock`), os blocos fixos do prompt e o parsing das variaveis de ambiente. Nao
+precisam de token, rede nem banco.
 
 ```bash
 pip install -r requirements-dev.txt
@@ -63,14 +68,24 @@ O projeto inclui `Dockerfile` e `docker-compose.yml` prontos para rodar num NAS 
    suas chaves reais - o CasaOS tambem permite preencher as variaveis listadas em
    `x-casaos.envs` diretamente na interface.
 5. Inicie o app. Os dados de memoria ficam persistidos em `./data` (montado como volume),
-   entao sobrevivem a reinicios/atualizacoes do container.
+   entao sobrevivem a reinicios/atualizacoes do container. O container roda como usuario
+   sem root (uid 1000): rode `mkdir -p data && sudo chown 1000:1000 data` no NAS antes de
+   iniciar, senao o bot nao consegue abrir o SQLite.
 
 ### Opcao B - Docker Compose manual (SSH no NAS)
 
 ```bash
 cd /caminho/para/OrionAI-Discord
 cp .env.example .env   # edite com suas chaves
+mkdir -p data && sudo chown 1000:1000 data   # o container roda sem root (uid 1000)
 docker compose up -d --build
+```
+
+O container roda como usuario sem root (uid 1000) e precisa escrever o SQLite em
+`./data`. Antes do primeiro `up` (e ao atualizar um deploy antigo que rodava como root):
+
+```bash
+mkdir -p data && sudo chown 1000:1000 data
 ```
 
 Para atualizar apos alterar o codigo:
@@ -282,6 +297,8 @@ maquina com GPU e aponte o bot para ela pela rede - nao no proprio NAS.
 Comando com o prefixo ja e um endereco direto ao bot: funciona solto no canal, sem
 precisar de `@`, e tambem em DM. Vale so para comando existente - `o!naoexiste` nao
 acorda o bot.
+
+`o!` e o padrao de `COMMAND_PREFIX`; `help` e alias de `ajuda`.
 
 - `o!ajuda` - embed com os comandos e botoes de Memoria, Status e Parar. Clicar
   responde so para quem clicou (ephemeral), sem digitar comando.

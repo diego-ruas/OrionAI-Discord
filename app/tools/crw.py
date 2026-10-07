@@ -18,7 +18,7 @@ async def _crw_request(path, body):
         headers={"Authorization": f"Bearer {config.crw_api_key}"},
     ) as res:
         if not res.ok:
-            text = await res.text()
+            text = (await res.text())[:300]
             raise RuntimeError(f"fastCRW respondeu {res.status} em {path}: {text}")
         return await res.json()
 

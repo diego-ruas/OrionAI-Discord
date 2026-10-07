@@ -72,7 +72,9 @@ _conn.executescript(
         created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
-    CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, id);
+    -- Nenhuma query filtra por user_id; o indice so custava escrita. Indice nao e dado
+    -- do usuario, entao dropar e seguro.
+    DROP INDEX IF EXISTS idx_messages_user;
     -- Memoria de longo prazo: fatos que sobrevivem a rotacao do historico e ao reset
     -- de mensagens. Escritos pelo modelo via ferramenta remember_fact.
     CREATE TABLE IF NOT EXISTS facts (
@@ -270,6 +272,11 @@ def get_ambient_messages(channel_id, max_messages):
 def clear_ambient_messages(channel_id):
     with _conn:
         _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
+
+
+def clear_all_ambient_messages():
+    with _conn:
+        _conn.execute("DELETE FROM ambient_messages")
 
 
 # --- Modo silencioso ---

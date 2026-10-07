@@ -66,3 +66,25 @@ def test_fallbacks_padrao_existem_e_sao_free(config_module):
     assert fallbacks, "sem fallback, um 429 do modelo principal vira falha de resposta"
     assert all(m.endswith(":free") for m in fallbacks)
     assert config_module.config.model not in fallbacks
+
+
+def _recarregar(monkeypatch, **env):
+    for nome, valor in env.items():
+        monkeypatch.setenv(nome, valor)
+    return importlib.reload(importlib.import_module("app.config"))
+
+
+def test_numero_vazio_cai_no_default(config_module, monkeypatch):
+    recarregado = _recarregar(monkeypatch, VISION_MAX_IMAGE_PX="")
+    assert recarregado.config.vision_max_image_px == 1024
+
+
+def test_numero_invalido_aponta_a_variavel(config_module, monkeypatch):
+    with pytest.raises(RuntimeError, match="VISION_MAX_IMAGE_PX"):
+        _recarregar(monkeypatch, VISION_MAX_IMAGE_PX="abc")
+
+
+def test_fallback_vazio_usa_lista_padrao(config_module, monkeypatch):
+    recarregado = _recarregar(monkeypatch, OPENROUTER_FALLBACK_MODELS="")
+    assert len(recarregado.config.fallback_models) == 3
+    assert all(m.endswith(":free") for m in recarregado.config.fallback_models)

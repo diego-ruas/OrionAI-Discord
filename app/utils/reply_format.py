@@ -32,6 +32,10 @@ def truncate_reply(text, max_chars):
     if best_break > max_chars * 0.5:
         cut = cut[: best_break + 1]
 
+    # Corte no meio de um bloco de codigo deixaria o Discord renderizando o resto da
+    # mensagem (inclusive a nota) como codigo.
+    if _has_unclosed_code_block(cut):
+        cut = cut.rstrip() + "\n```"
     return cut.rstrip() + TRUNCATION_NOTE
 
 
@@ -77,10 +81,8 @@ def split_reply(text, max_messages=3, enabled=True):
         merge = chunks and (
             # Ja usamos todas as mensagens permitidas: o resto vai junto na ultima.
             len(chunks) >= max_messages
-            # Nao deixa uma mensagem so com o rodape de corte, nem parte um bloco de
-            # codigo que abriu num paragrafo e fecha em outro.
+            # Nao deixa uma mensagem so com o rodape de corte.
             or paragraph.startswith("-# ")
-            or _has_unclosed_code_block(chunks[-1])
         )
         if merge:
             chunks[-1] = f"{chunks[-1]}\n\n{paragraph}"

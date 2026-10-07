@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from .config import config
@@ -9,6 +10,10 @@ API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # paginas e conferir um detalhe batia no teto e caia na resposta forcada sem tools -
 # justamente nas perguntas em que pesquisar mais importa.
 MAX_TOOL_ITERATIONS = 6
+# Prazo por modelo tentado. Cada tentativa pode fazer ate 7 chamadas de 60s mais
+# fastCRW; sem teto a pessoa esperava minutos com o lock dela preso antes de ver
+# qualquer resposta ou o proximo fallback assumir.
+MODEL_ATTEMPT_TIMEOUT_SECONDS = 90
 
 # Conteudo vindo de ferramentas de internet (paginas da web, resultados de busca) e dado
 # nao confiavel: pode conter texto tentando se passar por instrucao ("ignore as regras
@@ -22,6 +27,16 @@ UNTRUSTED_TOOL_RESULT_TEMPLATE = (
     "{content}\n\n"
     "[FIM DE DADO EXTERNO]"
 )
+
+
+# O texto externo pode conter os proprios marcadores de isolamento para "fechar" o bloco
+# e fazer o que vem depois parecer instrucao. Troca o colchete para o marcador nao bater.
+def _neutralize_markers(text):
+    return (
+        str(text)
+        .replace("[INICIO DE DADO EXTERNO", "(INICIO DE DADO EXTERNO")
+        .replace("[FIM DE DADO EXTERNO", "(FIM DE DADO EXTERNO")
+    )
 
 
 class RateLimitError(Exception):
@@ -89,22 +104,28 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context, endp
                 raise RuntimeError(f"Modelo {model} devolveu conteudo vazio")
             return content
 
-        messages.append(message)
-
+        valid_calls = []
         for call in tool_calls:
             # Modelos gratuitos as vezes emitem tool_calls fora do formato. Ler os
-            # campos direto (call["id"], call["function"]["name"]) fazia um KeyError
-            # derrubar a resposta inteira; aqui a chamada torta vira um erro que o
-            # modelo consegue ler e contornar.
+            # campos direto fazia um KeyError derrubar a resposta inteira; aqui a
+            # chamada torta e descartada antes de ir para o historico.
             if not isinstance(call, dict):
                 print(f"[openrouter] tool_call ignorada (nao e objeto): {call!r}")
-                continue
-
-            call_id = call.get("id")
-            if not call_id:
+            elif not call.get("id"):
                 print(f"[openrouter] tool_call sem id, ignorada: {call!r}")
-                continue
+            else:
+                valid_calls.append(call)
 
+        if not valid_calls:
+            content = message.get("content")
+            if not (content or "").strip():
+                raise RuntimeError(f"Modelo {model} devolveu conteudo vazio")
+            return content
+
+        messages.append({**message, "tool_calls": valid_calls})
+
+        for call in valid_calls:
+            call_id = call["id"]
             function = call.get("function") or {}
             name = function.get("name")
 
@@ -118,24 +139,37 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context, endp
                     raw_result = await run_tool(name, args, tool_context)
                     if name in UNTRUSTED_TOOLS:
                         result = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(
-                            content=raw_result
+                            content=_neutralize_markers(raw_result)
                         )
                     else:
                         result = raw_result
                 except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
                     result = f"Erro ao executar ferramenta: {err}"
+                    if name in UNTRUSTED_TOOLS:
+                        # O erro pode carregar trecho da resposta externa.
+                        result = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(
+                            content=_neutralize_markers(result)
+                        )
 
             messages.append(
                 {"role": "tool", "tool_call_id": call_id, "content": result}
             )
 
     # Estourou o limite de idas e vindas de ferramentas. Em vez de falhar, faz uma
-    # ultima chamada sem tools para o modelo ser obrigado a responder em texto.
+    # ultima chamada pedindo resposta em texto. As tools continuam no payload porque o
+    # OpenRouter exige `tools` em toda request cujo historico tem tool_calls.
     print(
         f"[openrouter] {model} excedeu {MAX_TOOL_ITERATIONS} rodadas de tools; "
-        "pedindo uma resposta final sem ferramentas."
+        "pedindo uma resposta final."
     )
-    final = await _call_model(session, model, messages, use_tools=False, endpoint=endpoint)
+    final_messages = [
+        *messages,
+        {
+            "role": "user",
+            "content": "Responda agora com o que ja tem, sem chamar mais ferramentas.",
+        },
+    ]
+    final = await _call_model(session, model, final_messages, use_tools=use_tools, endpoint=endpoint)
     content = final.get("content")
     if not (content or "").strip():
         raise RuntimeError(f"Modelo {model} nao produziu resposta final")
@@ -160,14 +194,24 @@ def build_image_content(text, images):
 async def generate_reply(messages, tool_context=None, models=None, use_tools=True, endpoint=None):
     models_to_try = models or [config.model, *config.fallback_models]
     last_error = None
+    # So o ultimo erro subia: um 429 do primeiro modelo sumia se o ultimo fallback
+    # falhasse com 404/5xx, e o aviso de limite atingido nunca aparecia.
+    rate_limited = None
 
     for model in models_to_try:
         try:
-            return await _run_with_tools(model, messages, use_tools, tool_context, endpoint)
+            return await asyncio.wait_for(
+                _run_with_tools(model, messages, use_tools, tool_context, endpoint),
+                timeout=MODEL_ATTEMPT_TIMEOUT_SECONDS,
+            )
         except Exception as err:  # noqa: BLE001 - mirrors JS catch-all
             last_error = err
-            print(f"[openrouter] Falha com {model}: {err}")
+            if rate_limited is None and isinstance(err, RateLimitError):
+                rate_limited = err
+            print(f"[openrouter] Falha com {model}: {type(err).__name__}: {err}")
 
+    if rate_limited:
+        raise rate_limited
     raise last_error or RuntimeError("Nenhum modelo disponivel respondeu.")
 
 

@@ -19,6 +19,33 @@ def _flag(name, default):
     return raw.strip().lower() in ("1", "true", "yes", "sim", "on")
 
 
+def _text(name, default):
+    value = os.environ.get(name, "").strip()
+    return value or default
+
+
+# `.env` com `VAR=` vira string vazia, e `int("")` derrubava o boot sem dizer qual
+# variavel estava errada. Vazio cai no default; lixo aponta a variavel.
+def _int(name, default):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise RuntimeError(f"Variavel de ambiente {name} invalida: {raw!r} (esperado numero)") from None
+
+
+def _float(name, default):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        raise RuntimeError(f"Variavel de ambiente {name} invalida: {raw!r} (esperado numero)") from None
+
+
 DEFAULT_PERSONALITY_PROMPT = (
     "Voce conversa com as pessoas de um servidor do Discord. Responda em portugues, "
     "num tom leve e bem-humorado, como alguem que e boa companhia no chat e por acaso "
@@ -193,7 +220,7 @@ class Config:
         self.discord_token = _required("DISCORD_TOKEN")
         self.openrouter_api_key = _required("OPENROUTER_API_KEY")
         self.crw_api_key = os.environ.get("CRW_API_KEY", "")
-        self.model = os.environ.get("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")
+        self.model = _text("OPENROUTER_MODEL", "poolside/laguna-s-2.1:free")
         # VISION_MODEL e o nome atual: desde que a visao pode apontar para outro
         # provedor (VISION_API_BASE), chamar isso de "OPENROUTER_..." confundia - o
         # valor tem que ser o id do modelo no endpoint escolhido, seja OpenRouter,
@@ -201,7 +228,7 @@ class Config:
         self.vision_model = (
             os.environ.get("VISION_MODEL")
             or os.environ.get("OPENROUTER_VISION_MODEL")
-            or "nvidia/nemotron-nano-12b-v2-vl:free"
+            or "thinkingmachines/inkling-small:free"
         )
         # Sem fallback, um unico 429 do modelo gratuito ja virava "nao consegui
         # responder". O padrao lista modelos ":free" maiores e com tool calling, do
@@ -211,11 +238,11 @@ class Config:
         # em openrouter.ai/models de vez em quando.
         self.fallback_models = [
             m.strip()
-            for m in os.environ.get(
+            for m in _text(
                 "OPENROUTER_FALLBACK_MODELS",
-                "deepseek/deepseek-chat-v3-0324:free,"
-                "qwen/qwen3-235b-a22b:free,"
-                "meta-llama/llama-3.3-70b-instruct:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free,"
+                "nvidia/nemotron-3-super-120b-a12b:free,"
+                "cohere/north-mini-code:free",
             ).split(",")
             if m.strip()
         ]
@@ -228,13 +255,13 @@ class Config:
 
         # Antes de enviar, a imagem e reduzida a esse lado maior e recomprimida em JPEG.
         # 0 desliga o redimensionamento.
-        self.vision_max_image_px = int(os.environ.get("VISION_MAX_IMAGE_PX", "1024"))
-        self.vision_jpeg_quality = int(os.environ.get("VISION_JPEG_QUALITY", "85"))
+        self.vision_max_image_px = _int("VISION_MAX_IMAGE_PX", 1024)
+        self.vision_jpeg_quality = _int("VISION_JPEG_QUALITY", 85)
 
         # OCR local (Tesseract): le o texto da imagem sem mandar nada para fora.
         self.ocr_enabled = _flag("OCR_ENABLED", True)
-        self.ocr_langs = os.environ.get("OCR_LANGS", "por+eng")
-        self.ocr_min_chars = int(os.environ.get("OCR_MIN_CHARS", "24"))
+        self.ocr_langs = _text("OCR_LANGS", "por+eng")
+        self.ocr_min_chars = _int("OCR_MIN_CHARS", 24)
         # Com texto suficiente lido localmente, responder so com esse texto e nao mandar
         # a imagem para a nuvem. Desligue para sempre usar o modelo de visao.
         self.ocr_skips_vision = _flag("OCR_SKIPS_VISION", True)
@@ -254,21 +281,21 @@ class Config:
         # corte transformava isso em texto pela metade com aviso de truncado. Quem
         # segura o tamanho e o prompt (brevidade e o padrao); este limite existe so
         # como teto de seguranca, e nao como o formato desejado da resposta.
-        self.max_reply_chars = int(os.environ.get("MAX_REPLY_CHARS", "1700"))
+        self.max_reply_chars = _int("MAX_REPLY_CHARS", 1700)
 
         # Fatos de longo prazo por canal (ferramenta remember_fact).
         self.max_facts_per_channel = int(os.environ.get("MAX_FACTS_PER_CHANNEL", "40"))
 
         # Mensagens do canal que nao foram direcionadas ao bot, guardadas so para o
         # bot saber do que se estava falando quando finalmente for chamado. 0 desliga.
-        self.ambient_context_messages = int(os.environ.get("AMBIENT_CONTEXT_MESSAGES", "12"))
+        self.ambient_context_messages = _int("AMBIENT_CONTEXT_MESSAGES", 12)
 
         # Resposta longa sai em mensagens separadas (quebrando nos paragrafos) em vez
         # de um bloco unico, com pausa de digitacao entre elas.
         self.split_replies = _flag("SPLIT_REPLIES", True)
-        self.max_reply_messages = int(os.environ.get("MAX_REPLY_MESSAGES", "3"))
-        self.typing_chars_per_second = float(os.environ.get("TYPING_CHARS_PER_SECOND", "28"))
-        self.max_typing_delay_seconds = float(os.environ.get("MAX_TYPING_DELAY_SECONDS", "5"))
+        self.max_reply_messages = _int("MAX_REPLY_MESSAGES", 3)
+        self.typing_chars_per_second = _float("TYPING_CHARS_PER_SECOND", 28)
+        self.max_typing_delay_seconds = _float("MAX_TYPING_DELAY_SECONDS", 2)
 
         # Cargos que, alem de administrador/gerenciar servidor/gerenciar mensagens,
         # podem apagar dados do bot. Nome ou id, separados por virgula. Ver
@@ -282,15 +309,15 @@ class Config:
         # Nomes que acordam o bot num canal sem precisar de @ (separados por virgula).
         self.bot_names = [
             n.strip().lower()
-            for n in os.environ.get("BOT_NAMES", "roberto").split(",")
+            for n in os.environ.get("BOT_NAMES", "orionai,orion").split(",")
             if n.strip()
         ]
 
         # Depois de responder alguem, o bot continua a conversa com essa mesma pessoa
         # sem exigir @ novamente, por esse tempo. 0 desliga.
-        self.followup_window_seconds = float(os.environ.get("FOLLOWUP_WINDOW_SECONDS", "15"))
+        self.followup_window_seconds = _float("FOLLOWUP_WINDOW_SECONDS", 15)
 
-        self.timezone = os.environ.get("TIMEZONE", "America/Sao_Paulo")
+        self.timezone = _text("TIMEZONE", "America/Sao_Paulo")
 
         # Presenca ("Jogando/Assistindo/Ouvindo ...") alternada. Formato: entradas
         # "tipo:texto" separadas por "|". Ver app/utils/presence.py. Vazio desliga.
@@ -298,16 +325,14 @@ class Config:
             "PRESENCE",
             "listening:{prefix}ajuda|watching:{guilds} servidores",
         )
-        self.presence_rotate_seconds = float(
-            os.environ.get("PRESENCE_ROTATE_SECONDS", "180")
-        )
-        self.presence_status = os.environ.get("PRESENCE_STATUS", "online")
+        self.presence_rotate_seconds = _float("PRESENCE_ROTATE_SECONDS", 180)
+        self.presence_status = _text("PRESENCE_STATUS", "online")
 
         # Prefixo dos comandos. Sem espacos, e vale minusculo (a comparacao e feita em
         # lowercase). Aparece nas mensagens de ajuda e de erro pelo codigo, nunca fixo.
         self.command_prefix = os.environ.get("COMMAND_PREFIX", "o!").strip() or "o!"
 
-        self.default_personality_prompt = os.environ.get("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
+        self.default_personality_prompt = _text("SYSTEM_PROMPT", DEFAULT_PERSONALITY_PROMPT)
         self.system_prompt = self.build_system_prompt()
 
     def build_system_prompt(self, dynamic_context=None):
@@ -322,7 +347,8 @@ class Config:
             + SAFETY_INSTRUCTIONS
         )
         # O contexto dinamico (hora, fatos memorizados, conversa recente do canal) vai
-        # no fim, depois das regras, e e sempre gerado pelo codigo - nunca por usuarios.
+        # no fim, depois das regras, e e gerado pelo codigo. As mensagens ambiente vem
+        # de terceiros, por isso entram marcadas como dado e com quebras achatadas.
         if dynamic_context:
             prompt += "\n\n" + dynamic_context
         return prompt

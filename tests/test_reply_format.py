@@ -38,6 +38,12 @@ def test_truncate_aceita_none():
     assert truncate_reply(None, 10) == ""
 
 
+def test_truncate_fecha_bloco_de_codigo_cortado_no_meio():
+    cortado = truncate_reply("```py\n" + "x = 1\n" * 400, 200)
+    assert cortado.count("```") % 2 == 0
+    assert cortado.endswith(TRUNCATION_NOTE)
+
+
 def test_split_vazio():
     assert split_reply("") == []
     assert split_reply(None) == []

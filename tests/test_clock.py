@@ -7,10 +7,6 @@ from app.utils import clock
 TZ = "America/Sao_Paulo"
 
 
-def _agora():
-    return datetime.now(clock._resolve_zone(TZ))
-
-
 def test_resolve_zone_cai_para_utc_em_nome_invalido():
     zona = clock._resolve_zone("Nao/Existe")
     assert datetime.now(zona).utcoffset() == timedelta(0)
@@ -40,10 +36,11 @@ def test_period_of_day(hora, esperado):
     assert clock.period_of_day(hora) == esperado
 
 
-def test_now_description_traz_data_hora_e_periodo():
-    agora = _agora()
-    texto = clock.now_description(TZ)
-    assert clock.WEEKDAYS[agora.weekday()] in texto
-    assert clock.MONTHS[agora.month - 1] in texto
-    assert str(agora.year) in texto
-    assert clock.period_of_day(agora.hour) in texto
+def test_now_description_traz_data_hora_e_periodo(monkeypatch):
+    class _Fixo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2024, 3, 15, 4, 30, tzinfo=tz)
+
+    monkeypatch.setattr(clock, "datetime", _Fixo)
+    assert clock.now_description(TZ) == "sexta-feira, 15 de marco de 2024, 04:30 (madrugada)"

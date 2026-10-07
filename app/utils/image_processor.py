@@ -8,6 +8,10 @@ from .http_client import get_session
 # Tipos MIME de imagem aceitos por OpenRouter
 ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
+# Anexo de centenas de MB (ate 10 por mensagem) ficava inteiro em memoria duas vezes:
+# os bytes baixados e a copia em base64. Acima disso a imagem e ignorada.
+MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
 # Pillow e opcional: sem ele o bot continua funcionando, so manda a imagem no tamanho
 # original (o que gasta muito mais token e pode estourar o limite da requisicao).
 try:
@@ -74,6 +78,10 @@ def _shrink(data, content_type):
 async def _process_attachment(session, attachment):
     content_type = getattr(attachment, "content_type", None)
     if content_type not in ALLOWED_TYPES:
+        return None
+
+    if (getattr(attachment, "size", 0) or 0) > MAX_ATTACHMENT_BYTES:
+        print(f"[imagens] {attachment.filename} ignorado: {attachment.size} bytes acima do limite.")
         return None
 
     try:
