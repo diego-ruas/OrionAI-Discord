@@ -32,7 +32,7 @@ from .openrouter import (
     generate_vision_reply,
 )
 from .memory import HISTORY_SAFETY_MARGIN, schedule_curation
-from .permissions import can_manage, denial_message
+from .permissions import can_manage, denial_message, is_owner
 from .utils import engagement, jev, ocr, ping_pref, presence
 from .utils.chat_format import (
     compose_context,
@@ -856,7 +856,7 @@ async def on_message(message):
 
     # Antes de qualquer trabalho caro (download, OCR, modelo): sem isso uma pessoa
     # consome sozinha a cota diaria dos modelos :free de todo mundo.
-    verdict = _rate_limiter.check(message.author.id)
+    verdict = "ok" if is_owner(message.author) else _rate_limiter.check(message.author.id)
     if verdict != "ok":
         if verdict == "warn":
             await message.channel.send(
@@ -1009,6 +1009,7 @@ async def on_message(message):
                         ],
                     ),
                     no_ping=get_no_ping(),
+                    allow_ping=ping_pref.asks_to_mention(text),
                 )
                 if not ping_pref.asks_to_mention(text):
                     reply = strip_leading_mention(reply, message.author.id)

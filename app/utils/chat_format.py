@@ -70,17 +70,37 @@ def render_mentions(text, people):
     return _MENTION_ID.sub(repl, text)
 
 
-def resolve_mentions(text, people, no_ping=frozenset()):
+def resolve_mentions(text, people, no_ping=frozenset(), allow_ping=True):
     """Mencoes da resposta do modelo, resolvidas pelo codigo.
 
     O modelo escreve "@apelido"; o codigo troca por <@id> so se o nome bate com UMA pessoa
     conhecida (nome ambiguo fica texto puro). Copiar ids de 18 digitos errava pessoa. Um
-    <@id> que o modelo escreva por conta propria so passa se o id for de alguem conhecido."""
+    <@id> que o modelo escreva por conta propria so passa se o id for de alguem conhecido.
+
+    allow_ping=False (ninguem pediu para marcar): nada vira ping, e o nome sai sem o "@".
+    Sem isso o modelo marcava a pessoa em toda resposta, so por citar o nome.
+
+    "Apelido (@usuario)" copiado do rotulo do prompt volta a ser so o apelido."""
+
+    for person in people.values():
+        username = " ".join(str(person["username"] or "").split())
+        if not username:
+            continue
+        names = {" ".join(str(person["display_name"] or "").split()), username}
+        for name in filter(None, names):
+            text = re.sub(
+                re.escape(name) + r"\s*\(@" + re.escape(username) + r"\)",
+                lambda _m, n=name: n,
+                text,
+                flags=re.IGNORECASE,
+            )
 
     def keep_known(match):
         uid = match.group(1)
         if uid not in people:
             return "alguem"
+        if not allow_ping:
+            return _mention_name(people[uid])
         return f"@{_mention_name(people[uid])}" if uid in no_ping else match.group(0)
 
     text = _MENTION_ID.sub(keep_known, text)
@@ -103,6 +123,8 @@ def resolve_mentions(text, people, no_ping=frozenset()):
         if len(ids) != 1:
             return match.group(0)
         uid = next(iter(ids))
+        if not allow_ping:
+            return match.group(1)
         # Quem pediu para nao ser marcado continua citado pelo nome, sem ping.
         return match.group(0) if uid in no_ping else f"<@{uid}>"
 

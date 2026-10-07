@@ -23,9 +23,14 @@ def _has_admin_role(member):
     return any(entry in names or entry in ids for entry in config.admin_roles)
 
 
+def is_owner(author):
+    """Dono do bot (OWNER_IDS): passa por cima de qualquer checagem de permissao."""
+    return str(getattr(author, "id", "")) in config.owner_ids
+
+
 def can_manage(author, channel):
     """True se a pessoa pode apagar/alterar dados do bot neste canal."""
-    if isinstance(channel, discord.DMChannel):
+    if is_owner(author) or isinstance(channel, discord.DMChannel):
         return True
 
     # Permissao no canal, nao so no servidor: os dados do bot sao por canal, entao um

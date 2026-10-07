@@ -18,6 +18,8 @@ services:
       VISION_MODEL: ${VISION_MODEL:-}
       OPENROUTER_VISION_MODEL: ${OPENROUTER_VISION_MODEL:-}
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
+      # Donos do bot: todas as permissoes e sem limite de uso. Vazio = padrao de app/config.py.
+      OWNER_IDS: ${OWNER_IDS:-}
       # Ultimo recurso da cadeia: Gemini no Google AI Studio (camada gratuita). Vazio = desligado.
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GOOGLE_MODELS: ${GOOGLE_MODELS:-}

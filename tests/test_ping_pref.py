@@ -50,3 +50,20 @@ def test_strip_leading_mention():
     assert strip_leading_mention("<@1>\n\nkkk", 1) == "kkk"
     assert strip_leading_mention("kkk <@1> oi", 1) == "kkk <@1> oi"
     assert strip_leading_mention("<@2> oi", 1) == "<@2> oi"
+
+
+def test_sem_pedido_de_marcar_nada_vira_ping():
+    people = known_people(
+        [{"user_id": "1", "username": "SPÆRX", "display_name": "SPÆRX"},
+         {"user_id": "2", "username": "niro_x", "display_name": "Niro"}]
+    )
+    out = resolve_mentions("SPÆRX (@SPÆRX) e @Niro (@niro_x) kkk <@1>", people, allow_ping=False)
+    assert "<@" not in out and "@" not in out
+    assert out == "SPÆRX e Niro kkk SPÆRX"
+
+
+def test_rotulo_copiado_do_prompt_volta_a_ser_so_o_apelido():
+    people = known_people([{"user_id": "2", "username": "niro_x", "display_name": "Niro"}])
+    assert resolve_mentions("oi Niro (@niro_x)!", people, allow_ping=False) == "oi Niro!"
+    # mesmo com ping liberado, o rotulo copiado nao vira marcacao
+    assert resolve_mentions("oi Niro (@niro_x)!", people) == "oi Niro!"

@@ -164,11 +164,12 @@ MENTION_INSTRUCTIONS = (
     "conta e HH:MM e o horario. Quando apelido e usuario sao iguais aparece so "
     "\"**@usuario**\". As pessoas podem se chamar pelo apelido, por parte dele ou pelo "
     "usuario: e a mesma pessoa se o id for o mesmo, e sao pessoas diferentes se o id for "
-    "diferente, mesmo com nomes parecidos. Ao falar de alguem, use o apelido. A mensagem "
+    "diferente, mesmo com nomes parecidos. Ao falar de alguem, escreva so o apelido, sem "
+    "@ e sem repetir o (@usuario) do rotulo. A mensagem "
     "atual pode trazer uma linha extra \"(usuarios mencionados de verdade nesta mensagem: "
     "**apelido (@usuario)** (id: ID), ...)\" quando o autor usou uma mencao real do "
     "Discord. Mencoes antigas aparecem no historico como \"@apelido\".\n"
-    "Para marcar alguem, escreva \"@apelido\" (ex.: @Niro); o codigo converte na marcacao "
+    "So quando pedirem para marcar alguem, escreva \"@apelido\" (ex.: @Niro); o codigo converte na marcacao "
     "real do Discord se esse apelido for de UMA pessoa conhecida nesta conversa. Nunca "
     "escreva ids nem <@...>. Se pedirem para marcar alguem que voce nao conhece, diga que "
     "essa pessoa ainda nao apareceu na conversa. Nunca marque @everyone, @here ou cargos.\n"
@@ -338,6 +339,13 @@ class Config:
             for r in os.environ.get("ADMIN_ROLES", "").split(",")
             if r.strip()
         ]
+        # Donos do bot (ids de usuario do Discord, separados por virgula): todas as permissoes
+        # em qualquer canal e sem limite de mensagens. Vazio cai no padrao do codigo.
+        self.owner_ids = {
+            i.strip()
+            for i in _text("OWNER_IDS", "271256369833836545").split(",")
+            if i.strip()
+        }
 
         # Nomes que acordam o bot num canal sem precisar de @ (separados por virgula).
         self.bot_names = [
