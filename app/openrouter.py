@@ -56,10 +56,12 @@ def vision_endpoint():
     return f"{config.vision_api_base}/chat/completions", config.vision_api_key
 
 
-async def _call_model(session, model, messages, use_tools, endpoint=None):
+async def _call_model(session, model, messages, use_tools, endpoint=None, tool_names=None):
     payload = {"model": model, "messages": messages}
     if use_tools:
-        payload["tools"] = tool_definitions
+        payload["tools"] = [
+            t for t in tool_definitions if tool_names is None or t["function"]["name"] in tool_names
+        ]
 
     url, api_key = endpoint or (API_URL, config.openrouter_api_key)
 
@@ -87,12 +89,14 @@ async def _call_model(session, model, messages, use_tools, endpoint=None):
         return message
 
 
-async def _run_with_tools(model, initial_messages, use_tools, tool_context, endpoint=None):
+async def _run_with_tools(
+    model, initial_messages, use_tools, tool_context, endpoint=None, tool_names=None
+):
     messages = list(initial_messages)
     session = await get_session()
 
     for _ in range(MAX_TOOL_ITERATIONS):
-        message = await _call_model(session, model, messages, use_tools, endpoint)
+        message = await _call_model(session, model, messages, use_tools, endpoint, tool_names)
 
         tool_calls = message.get("tool_calls")
         if tool_calls is not None and not isinstance(tool_calls, list):
@@ -173,7 +177,9 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context, endp
             "content": "Responda agora com o que ja tem, sem chamar mais ferramentas.",
         },
     ]
-    final = await _call_model(session, model, final_messages, use_tools=use_tools, endpoint=endpoint)
+    final = await _call_model(
+        session, model, final_messages, use_tools=use_tools, endpoint=endpoint, tool_names=tool_names
+    )
     content = final.get("content")
     if not (content or "").strip():
         raise RuntimeError(f"Modelo {model} nao produziu resposta final")
@@ -195,7 +201,12 @@ def build_image_content(text, images):
     return parts
 
 
-async def generate_reply(messages, tool_context=None, models=None, use_tools=True, endpoint=None):
+async def generate_reply(
+    messages, tool_context=None, models=None, use_tools=True, endpoint=None, tool_names=None
+):
+    """tool_names restringe as ferramentas oferecidas (None = todas); lista vazia = nenhuma."""
+    if tool_names is not None:
+        use_tools = bool(tool_names) and use_tools
     models_to_try = models or [config.model, *config.fallback_models]
     last_error = None
     # So o ultimo erro subia: um 429 do primeiro modelo sumia se o ultimo fallback
@@ -205,7 +216,7 @@ async def generate_reply(messages, tool_context=None, models=None, use_tools=Tru
     for model in models_to_try:
         try:
             return await asyncio.wait_for(
-                _run_with_tools(model, messages, use_tools, tool_context, endpoint),
+                _run_with_tools(model, messages, use_tools, tool_context, endpoint, tool_names),
                 timeout=MODEL_ATTEMPT_TIMEOUT_SECONDS,
             )
         except Exception as err:  # noqa: BLE001 - mirrors JS catch-all

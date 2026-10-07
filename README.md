@@ -118,7 +118,15 @@ O bot responde quando:
   janela de `FOLLOWUP_WINDOW_SECONDS` (15s por padrao) - sem precisar de `@` em cada
   mensagem. O relogio reinicia a cada resposta dele, entao e tempo de silencio, nao
   duracao total da conversa. Se a pessoa mencionar ou responder outra pessoa nesse
-  meio tempo, o bot entende que a conversa nao e com ele e fica calado.
+  meio tempo, o bot entende que a conversa nao e com ele e fica calado. Com
+  `JEV_FOLLOWUP_THRESHOLD` acima de 0, o Jev (modelo de decisao da TypeSafe) ainda
+  confere se a mensagem e mesmo pro bot antes de ele responder.
+
+Jev tambem pode julgar cada mensagem antes do modelo de conversa (tudo desligado por
+padrao, ver `.env.example`): `JEV_INTENT_CONFIDENCE` classifica o pedido (conversa,
+busca, link, memoria) para oferecer so as ferramentas que fazem sentido e estima o
+tamanho da resposta; `JEV_INJECTION_THRESHOLD` avisa o modelo quando a mensagem parece
+tentar mudar as regras do bot. Se o Jev falhar ou ficar na duvida, o bot segue como antes.
 
 Para encerrar antes da janela expirar, use `o!parar` (ou `o!tchau`):
 

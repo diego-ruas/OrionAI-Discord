@@ -63,3 +63,8 @@ def now_description(tz_name):
         f"{WEEKDAYS[now.weekday()]}, {now.day} de {MONTHS[now.month - 1]} de "
         f"{now.year}, {now:%H:%M} ({period_of_day(now.hour)})"
     )
+
+
+def local_hhmm(timestamp_ms, tz_name):
+    """Hora local HH:MM de um timestamp em milissegundos."""
+    return datetime.fromtimestamp(timestamp_ms / 1000, _resolve_zone(tz_name)).strftime("%H:%M")

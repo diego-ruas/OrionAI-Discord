@@ -69,6 +69,7 @@ _conn.executescript(
         channel_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         username TEXT,
+        display_name TEXT,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL
@@ -93,6 +94,8 @@ _conn.executescript(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id TEXT NOT NULL,
         username TEXT,
+        display_name TEXT,
+        user_id TEXT,
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL
     );
@@ -112,12 +115,27 @@ _conn.executescript(
         curated_until INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
     );
+    -- Pessoas que pediram para o bot nao marca-las. Uma linha por pessoa.
+    CREATE TABLE IF NOT EXISTS no_ping (
+        user_id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+    );
     """
 )
-# Coluna nova em banco existente: ADD COLUMN nao toca nos dados. Fatos antigos ficam
-# sem autor (NULL) e nao contam para a cota de ninguem.
-if "author_id" not in [r[1] for r in _conn.execute("PRAGMA table_info(facts)")]:
-    _conn.execute("ALTER TABLE facts ADD COLUMN author_id TEXT")
+
+
+def _ensure_column(table, column, decl):
+    # Coluna nova em banco existente: ADD COLUMN nao toca nos dados.
+    if column not in [r[1] for r in _conn.execute(f"PRAGMA table_info({table})")]:
+        _conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
+# Fatos antigos ficam sem autor (NULL) e nao contam para a cota de ninguem; mensagens
+# antigas ficam sem apelido e aparecem so pelo @usuario.
+_ensure_column("facts", "author_id", "TEXT")
+_ensure_column("messages", "display_name", "TEXT")
+_ensure_column("ambient_messages", "display_name", "TEXT")
+_ensure_column("ambient_messages", "user_id", "TEXT")
 _conn.commit()
 
 
@@ -125,12 +143,12 @@ def _now_ms():
     return int(time.time() * 1000)
 
 
-def add_message(channel_id, user_id, username, role, content, max_messages):
+def add_message(channel_id, user_id, username, display_name, role, content, max_messages):
     with _conn:
         _conn.execute(
-            "INSERT INTO messages (channel_id, user_id, username, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (channel_id, user_id, username, role, content, _now_ms()),
+            "INSERT INTO messages (channel_id, user_id, username, display_name, role, content, "
+            "created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (channel_id, user_id, username, display_name, role, content, _now_ms()),
         )
         _conn.execute(
             """
@@ -144,7 +162,7 @@ def add_message(channel_id, user_id, username, role, content, max_messages):
 
 def get_history(channel_id, max_messages):
     rows = _conn.execute(
-        "SELECT user_id, username, role, content FROM messages "
+        "SELECT user_id, username, role, content, display_name, created_at FROM messages "
         "WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
         (channel_id, max_messages),
     ).fetchall()
@@ -154,7 +172,9 @@ def get_history(channel_id, max_messages):
             "role": r[2],
             "content": r[3],
             "user_id": r[0],
-            "username": r[1] or "Unknown",
+            "username": r[1] or "",
+            "display_name": r[4],
+            "created_at": r[5],
         }
         for r in rows
     ]
@@ -179,9 +199,10 @@ def _rows_to_dicts(rows):
         {
             "id": r[0],
             "user_id": r[1],
-            "username": r[2] or "alguem",
+            "username": r[2] or "",
             "role": r[3],
             "content": r[4],
+            "display_name": r[5],
         }
         for r in rows
     ]
@@ -189,7 +210,7 @@ def _rows_to_dicts(rows):
 
 def get_messages_after(channel_id, after_id, limit):
     rows = _conn.execute(
-        "SELECT id, user_id, username, role, content FROM messages "
+        "SELECT id, user_id, username, role, content, display_name FROM messages "
         "WHERE channel_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
         (channel_id, after_id, limit),
     ).fetchall()
@@ -198,7 +219,7 @@ def get_messages_after(channel_id, after_id, limit):
 
 def get_oldest_messages(channel_id, limit):
     rows = _conn.execute(
-        "SELECT id, user_id, username, role, content FROM messages "
+        "SELECT id, user_id, username, role, content, display_name FROM messages "
         "WHERE channel_id = ? ORDER BY id ASC LIMIT ?",
         (channel_id, limit),
     ).fetchall()
@@ -342,15 +363,16 @@ def clear_facts(channel_id):
 # --- Contexto ambiente (conversa do canal sem o bot) ---
 
 
-def add_ambient_message(channel_id, username, content, max_messages):
+def add_ambient_message(channel_id, user_id, username, display_name, content, max_messages):
     if max_messages <= 0:
         return
 
     with _conn:
         _conn.execute(
-            "INSERT INTO ambient_messages (channel_id, username, content, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (channel_id, username, content, _now_ms()),
+            "INSERT INTO ambient_messages "
+            "(channel_id, user_id, username, display_name, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (channel_id, user_id, username, display_name, content, _now_ms()),
         )
         _conn.execute(
             """
@@ -367,12 +389,21 @@ def get_ambient_messages(channel_id, max_messages):
         return []
 
     rows = _conn.execute(
-        "SELECT username, content FROM ambient_messages WHERE channel_id = ? "
-        "ORDER BY id DESC LIMIT ?",
+        "SELECT username, content, display_name, created_at, user_id FROM ambient_messages "
+        "WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
         (channel_id, max_messages),
     ).fetchall()
     rows.reverse()
-    return [{"username": r[0] or "alguem", "content": r[1]} for r in rows]
+    return [
+        {
+            "username": r[0] or "",
+            "content": r[1],
+            "display_name": r[2],
+            "created_at": r[3],
+            "user_id": r[4],
+        }
+        for r in rows
+    ]
 
 
 def clear_ambient_messages(channel_id):
@@ -383,6 +414,27 @@ def clear_ambient_messages(channel_id):
 def clear_all_ambient_messages():
     with _conn:
         _conn.execute("DELETE FROM ambient_messages")
+
+
+# --- Preferencia de marcacao ---
+
+
+def set_no_ping(user_id, no_ping):
+    """Pessoa pediu para o bot nao marca-la (ou liberou de novo). Vale em todo canal e
+    sobrevive a o!reset: e preferencia da pessoa, nao conversa."""
+    with _conn:
+        if no_ping:
+            _conn.execute(
+                "INSERT INTO no_ping (user_id, created_at) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO NOTHING",
+                (str(user_id), _now_ms()),
+            )
+        else:
+            _conn.execute("DELETE FROM no_ping WHERE user_id = ?", (str(user_id),))
+
+
+def get_no_ping():
+    return {r[0] for r in _conn.execute("SELECT user_id FROM no_ping")}
 
 
 # --- Modo silencioso ---

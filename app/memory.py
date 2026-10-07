@@ -12,7 +12,12 @@ from .db import (
     set_curated_until,
 )
 from .openrouter import generate_reply
-from .utils.memory_format import build_curator_messages, parse_curator_reply, resolve_author
+from .utils.memory_format import (
+    build_curator_messages,
+    parse_curator_reply,
+    resolve_author,
+    resolve_subject,
+)
 
 # Espera o canal sossegar, para uma troca de varias mensagens virar uma chamada so.
 # Modelo :free tem limite de requisicoes.

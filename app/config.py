@@ -155,20 +155,30 @@ REASONING_INSTRUCTIONS = (
 )
 
 # Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
-# usuario no historico/prompt vem no formato "**nome** (id: 123): texto" - o id e
-# fornecido pelo codigo (app/main.py), nao inventado pelo modelo.
+# usuario no historico/prompt vem no formato "**apelido (@usuario)** (id: 123, HH:MM):
+# texto" - rotulo, id e horario sao fornecidos pelo codigo (app/utils/chat_format.py),
+# nao inventados pelo modelo.
 MENTION_INSTRUCTIONS = (
-    "\n\nCada mensagem de usuario no historico vem no formato \"**nome** (id: ID): "
-    "texto\", e a mensagem atual pode trazer uma linha extra \"(usuarios mencionados "
-    "de verdade nesta mensagem: **nome** (id: ID), ...)\" quando o autor usou uma "
-    "mencao real do Discord. Esses ids (do historico ou dessa linha extra) sao as "
-    "UNICAS fontes validas de id que voce pode usar. Quando quiser marcar/mencionar "
-    "um desses usuarios, escreva <@ID> usando o id exato fornecido. Se pedirem para "
-    "marcar/mencionar alguem cujo id voce nao tem em nenhuma dessas fontes, NUNCA "
-    "invente um nome ou id - diga que essa pessoa nao apareceu na conversa ainda ou "
-    "peca para ela ser mencionada de verdade primeiro. So marque quando fizer sentido "
-    "para a conversa, nao marque em toda mensagem, e nunca marque @everyone, @here "
-    "ou cargos."
+    "\n\nCada mensagem de usuario vem no formato \"**apelido (@usuario)** (id: ID, HH:MM): "
+    "texto\": o apelido e como a pessoa aparece no servidor, o @usuario e o nome unico da "
+    "conta e HH:MM e o horario. Quando apelido e usuario sao iguais aparece so "
+    "\"**@usuario**\". As pessoas podem se chamar pelo apelido, por parte dele ou pelo "
+    "usuario: e a mesma pessoa se o id for o mesmo, e sao pessoas diferentes se o id for "
+    "diferente, mesmo com nomes parecidos. Ao falar de alguem, use o apelido. A mensagem "
+    "atual pode trazer uma linha extra \"(usuarios mencionados de verdade nesta mensagem: "
+    "**apelido (@usuario)** (id: ID), ...)\" quando o autor usou uma mencao real do "
+    "Discord. Mencoes antigas aparecem no historico como \"@apelido\".\n"
+    "Para marcar alguem, escreva \"@apelido\" (ex.: @Niro); o codigo converte na marcacao "
+    "real do Discord se esse apelido for de UMA pessoa conhecida nesta conversa. Nunca "
+    "escreva ids nem <@...>. Se pedirem para marcar alguem que voce nao conhece, diga que "
+    "essa pessoa ainda nao apareceu na conversa. Nunca marque @everyone, @here ou cargos.\n"
+    "Regras de marcacao: sua resposta ja fica ligada a mensagem de quem voce responde, "
+    "entao NAO comece a resposta marcando essa pessoa. Marque so quando pedirem ou quando "
+    "for outra pessoa que precisa ver. Se alguem pedir para parar de marca-lo, nao marque "
+    "mais essa pessoa.\n"
+    "Nunca invente quem e quem: so diga que alguem e (ou nao e) outra pessoa se isso "
+    "estiver escrito na conversa. Na duvida sobre quem disse ou fez algo, nao arrisque a "
+    "piada: pergunte ou deixe passar."
 )
 
 # Sempre anexado: como usar a memoria do canal. Os fatos sao captados pela curadoria em
@@ -179,7 +189,10 @@ MEMORY_INSTRUCTIONS = (
     "longo prazo. As duas sao atualizadas automaticamente depois de cada conversa, "
     "entao voce nao precisa fazer nada para guardar algo; se pedirem para voce lembrar "
     "de alguma coisa, so confirme com naturalidade. Use o que ja sabe quando for "
-    "relevante, sem anunciar que lembrou. Se a pessoa pedir para voce esquecer algo, "
+    "relevante, sem anunciar que lembrou. Cada mensagem tem um autor, o nome em "
+    "negrito no comeco; ao dizer quem falou algo, so atribua a quem esta escrito la. "
+    "Se nao tiver certeza de quem disse, diga que nao lembra quem foi "
+    "em vez de chutar um nome. Se a pessoa pedir para voce esquecer algo, "
     "use a ferramenta forget_fact."
 )
 
@@ -321,6 +334,18 @@ class Config:
         # Depois de responder alguem, o bot continua a conversa com essa mesma pessoa
         # sem exigir @ novamente, por esse tempo. 0 desliga.
         self.followup_window_seconds = _float("FOLLOWUP_WINDOW_SECONDS", 15)
+
+        # Segunda opiniao do Jev (modelo de decisao da TypeSafe, via OpenRouter) so para o
+        # follow-up: dentro da janela, ele estima a chance da mensagem ser mesmo pro bot.
+        # 0 desliga (vale so a janela por tempo); acima de 0 e o corte da probabilidade.
+        self.jev_followup_threshold = _float("JEV_FOLLOWUP_THRESHOLD", 0)
+        self.jev_model = _text("JEV_MODEL", "typesafe/jev-1.13")
+        # Intencao e tamanho da mensagem pelo Jev: so restringe as ferramentas / ajusta o
+        # tamanho quando a opcao escolhida tem pelo menos essa probabilidade. 0 desliga.
+        self.jev_intent_confidence = _float("JEV_INTENT_CONFIDENCE", 0)
+        # Probabilidade minima de "tenta mudar as regras do bot" para o codigo avisar o
+        # modelo. 0 desliga.
+        self.jev_injection_threshold = _float("JEV_INJECTION_THRESHOLD", 0)
 
         self.timezone = _text("TIMEZONE", "America/Sao_Paulo")
 

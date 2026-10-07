@@ -44,3 +44,8 @@ def test_now_description_traz_data_hora_e_periodo(monkeypatch):
 
     monkeypatch.setattr(clock, "datetime", _Fixo)
     assert clock.now_description(TZ) == "sexta-feira, 15 de marco de 2024, 04:30 (madrugada)"
+
+
+def test_local_hhmm():
+    assert clock.local_hhmm(0, "UTC") == "00:00"
+    assert clock.local_hhmm(0, TZ) == "21:00"
