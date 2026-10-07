@@ -27,6 +27,9 @@ except ImportError:  # pragma: no cover - ambiente sem as libs
 # uso, e o resultado fica em cache para nao pagar o custo a cada imagem.
 _binary_ok = None
 
+# Imagem patologica nao pode prender a thread do OCR para sempre.
+OCR_TIMEOUT_SECONDS = 15
+
 
 def available():
     global _binary_ok
@@ -55,7 +58,10 @@ def extract_text(data):
             if getattr(img, "is_animated", False):
                 img.seek(0)
             # Escala de cinza ajuda o Tesseract e e mais barato que a imagem colorida.
-            text = pytesseract.image_to_string(img.convert("L"), lang=config.ocr_langs)
+            # timeout: imagem patologica nao pode prender a thread para sempre.
+            text = pytesseract.image_to_string(
+                img.convert("L"), lang=config.ocr_langs, timeout=OCR_TIMEOUT_SECONDS
+            )
     except Exception as err:  # noqa: BLE001 - imagem ruim ou idioma nao instalado
         print(f"[ocr] Falha ao ler imagem: {err}")
         return ""

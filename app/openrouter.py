@@ -10,6 +10,7 @@ API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # paginas e conferir um detalhe batia no teto e caia na resposta forcada sem tools -
 # justamente nas perguntas em que pesquisar mais importa.
 MAX_TOOL_ITERATIONS = 6
+MAX_TOOL_CALLS_PER_ROUND = 3
 # Prazo por modelo tentado. Cada tentativa pode fazer ate 7 chamadas de 60s mais
 # fastCRW; sem teto a pessoa esperava minutos com o lock dela preso antes de ver
 # qualquer resposta ou o proximo fallback assumir.
@@ -122,6 +123,9 @@ async def _run_with_tools(model, initial_messages, use_tools, tool_context, endp
                 raise RuntimeError(f"Modelo {model} devolveu conteudo vazio")
             return content
 
+        # Teto por rodada: uma resposta com dezenas de tool_calls multiplicaria o custo
+        # (e o volume de requisicoes ao fastCRW) de uma unica mensagem.
+        valid_calls = valid_calls[:MAX_TOOL_CALLS_PER_ROUND]
         messages.append({**message, "tool_calls": valid_calls})
 
         for call in valid_calls:

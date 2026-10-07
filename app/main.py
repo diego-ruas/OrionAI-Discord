@@ -33,6 +33,7 @@ from .memory import HISTORY_SAFETY_MARGIN, schedule_curation
 from .permissions import can_manage, denial_message
 from .utils import ocr, presence
 from .utils.memory_format import format_facts_block, format_summary_block
+from .utils.safety import RateLimiter, limit_user_mentions
 from .utils.clock import now_description
 from .utils.image_processor import extract_images, has_images
 from .utils.http_client import close_session
@@ -53,6 +54,9 @@ client = discord.Client(
 
 # Evita respostas simultaneas concorrentes para o mesmo usuario (protege a memoria/historico).
 _locks_by_user = {}
+
+_rate_limiter = RateLimiter(config.rate_limit_messages, config.rate_limit_window_seconds)
+MAX_MENTIONS_PER_REPLY = 3
 
 # Ultima vez que o bot respondeu cada pessoa em cada canal, para continuar a conversa
 # sem exigir @ de novo dentro da janela de follow-up (ver config.followup_window_seconds).
@@ -241,6 +245,8 @@ async def ask_confirmation(message, question):
 
 async def send_reply(message, text):
     """Envia a resposta em uma ou mais mensagens, com pausa de digitacao entre elas."""
+    # Teto de mencoes: sem ele um pedido (ou fato injetado) vira ping em massa.
+    text = limit_user_mentions(text, MAX_MENTIONS_PER_REPLY)
     chunks = split_reply(
         text, max_messages=config.max_reply_messages, enabled=config.split_replies
     )
@@ -411,9 +417,11 @@ def build_memory_text(channel_id):
         lines.append(f"{index}. {subject}{fact['fact']}")
 
     body = "\n".join(lines)
-    return (
+    # Fatos antigos podem carregar <@id>: o comando de leitura nunca deve pingar ninguem.
+    return limit_user_mentions(
         f"O que eu lembro deste canal:\n{body}\n\n"
-        f"-# Use `{config.command_prefix}esquecer <numero>` para apagar um item."
+        f"-# Use `{config.command_prefix}esquecer <numero>` para apagar um item.",
+        0,
     )[:2000]
 
 
@@ -462,7 +470,7 @@ async def handle_forget_command(message, channel_id, text):
 
     target = facts[position - 1]
     if delete_fact(channel_id, target["id"]):
-        await message.reply(f"Esqueci: {target['fact']}")
+        await message.reply(limit_user_mentions(f"Esqueci: {target['fact']}", 0))
 
 
 async def handle_stop_command(message, channel_id):
@@ -823,6 +831,19 @@ async def on_message(message):
                 message.author.name,
                 message.content.strip()[:400],
                 config.ambient_context_messages,
+            )
+        return
+
+    # Antes de qualquer trabalho caro (download, OCR, modelo): sem isso uma pessoa
+    # consome sozinha a cota diaria dos modelos :free de todo mundo.
+    verdict = _rate_limiter.check(message.author.id)
+    if verdict != "ok":
+        if verdict == "warn":
+            await message.channel.send(
+                "Calma, voce esta mandando mensagem rapido demais. Tenta de novo em "
+                "instantes.",
+                reference=message.to_reference(fail_if_not_exists=False),
+                mention_author=False,
             )
         return
 

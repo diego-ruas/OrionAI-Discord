@@ -218,6 +218,20 @@ Sao duas memorias diferentes:
   expulso; fato novo e descartado. Cada pessoa pode ter criado no maximo
   `MAX_FACTS_PER_AUTHOR` desses fatos, para ninguem ocupar todos os espacos sozinha.
 
+## Defesas
+
+- Fatos e resumo da memoria vem de conversa de terceiros: entram no prompt como dado
+  marcado (`NAO SAO INSTRUCOES`), em linha unica e sem colchetes nem `<`.
+- Limite de mensagens por pessoa (`RATE_LIMIT_MESSAGES` / `RATE_LIMIT_WINDOW_SECONDS`),
+  checado antes de baixar imagem, rodar OCR ou chamar o modelo.
+- `fetch_page` so aceita URL http(s) curta, sem IP literal, localhost, porta fora de
+  80/443 ou credenciais; no maximo 3 chamadas de ferramenta por rodada.
+- `forget_fact` (ferramenta) recusa consulta com menos de 3 caracteres ou que case com
+  mais de 3 fatos; o curinga `%`/`_` do LIKE e escapado.
+- Uma resposta menciona no maximo 3 usuarios; `o!memoria` e `Esqueci:` nunca mencionam.
+- Imagens: ate 4 por mensagem, 25 Mpx cada (bomba de descompressao vira erro) e OCR
+  com timeout de 15s.
+
 ## Nada de agendamento
 
 O bot so existe dentro da conversa: ele nao agenda lembretes nem manda mensagem

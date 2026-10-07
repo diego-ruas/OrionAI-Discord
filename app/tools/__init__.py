@@ -87,7 +87,17 @@ async def run_tool(name, args, context=None):
                 "Nao apaguei: apagar a memoria do canal e restrito a quem modera. "
                 "Diga isso a pessoa e siga a conversa normalmente."
             )
-        removed = forget_facts(channel_id, args.get("query"))
+        # Texto injetado numa pagina/fato nao pode apagar a memoria inteira: consulta
+        # curta ou ampla demais e recusada e a pessoa usa o comando, que pede confirmacao.
+        query = (args.get("query") or "").strip()
+        if len(query) < 3:
+            return "Consulta curta demais; peca um trecho mais especifico do fato."
+        removed = forget_facts(channel_id, query, max_matches=3)
+        if removed is None:
+            return (
+                "Esse texto casa com fatos demais; use o comando de esquecer, que pede "
+                "confirmacao."
+            )
         if removed:
             return f"{removed} fato(s) esquecido(s)."
         return "Nenhum fato memorizado corresponde a esse texto."

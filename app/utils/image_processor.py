@@ -11,11 +11,22 @@ ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 # Anexo de centenas de MB (ate 10 por mensagem) ficava inteiro em memoria duas vezes:
 # os bytes baixados e a copia em base64. Acima disso a imagem e ignorada.
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+# Limites de decodificacao: pixels por imagem e anexos processados por mensagem.
+MAX_IMAGE_PIXELS = 25_000_000
+MAX_ATTACHMENTS_PER_MESSAGE = 4
 
 # Pillow e opcional: sem ele o bot continua funcionando, so manda a imagem no tamanho
 # original (o que gasta muito mais token e pode estourar o limite da requisicao).
 try:
+    import warnings
+
     from PIL import Image
+
+    # Bomba de descompressao: um PNG pequeno pode virar centenas de MB de RAM ao
+    # decodificar. Acima do limite de pixels vira erro (tratado como imagem invalida)
+    # em vez de so aviso.
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    warnings.simplefilter("error", Image.DecompressionBombWarning)
 
     PILLOW_AVAILABLE = True
 except ImportError:  # pragma: no cover - ambiente sem Pillow
@@ -113,7 +124,7 @@ async def extract_images(attachments):
     """
     valid_attachments = [
         a for a in attachments if getattr(a, "content_type", None) in ALLOWED_TYPES
-    ]
+    ][:MAX_ATTACHMENTS_PER_MESSAGE]
     if not valid_attachments:
         return []
 

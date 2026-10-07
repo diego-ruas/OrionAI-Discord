@@ -2,6 +2,8 @@ import os
 import sqlite3
 import time
 
+from .utils.safety import escape_like
+
 DATA_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "memory.sqlite")
@@ -297,18 +299,26 @@ def get_facts(channel_id):
     return [{"id": r[0], "subject": r[1], "fact": r[2]} for r in rows]
 
 
-def forget_facts(channel_id, query):
-    """Apaga fatos que contenham o texto buscado. Retorna quantos foram apagados."""
+def forget_facts(channel_id, query, max_matches=None):
+    """Apaga fatos que contenham o texto buscado. Retorna quantos foram apagados, ou
+    None (sem apagar nada) se casar com mais de `max_matches` fatos."""
     query = (query or "").strip()
     if not query:
         return 0
 
+    # Curinga do LIKE escapado: sem isso query "%" apagava a memoria inteira.
+    pattern = f"%{escape_like(query)}%"
+    where = (
+        "channel_id = ? AND "
+        "(fact LIKE ? ESCAPE '\\' COLLATE NOCASE OR subject LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+    )
+    params = (channel_id, pattern, pattern)
     with _conn:
-        cursor = _conn.execute(
-            "DELETE FROM facts WHERE channel_id = ? AND "
-            "(fact LIKE ? COLLATE NOCASE OR subject LIKE ? COLLATE NOCASE)",
-            (channel_id, f"%{query}%", f"%{query}%"),
-        )
+        if max_matches is not None:
+            found = _conn.execute(f"SELECT COUNT(*) FROM facts WHERE {where}", params).fetchone()[0]
+            if found > max_matches:
+                return None
+        cursor = _conn.execute(f"DELETE FROM facts WHERE {where}", params)
         removed = cursor.rowcount
     return removed
 

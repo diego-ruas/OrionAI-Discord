@@ -293,6 +293,12 @@ class Config:
         self.typing_chars_per_second = _float("TYPING_CHARS_PER_SECOND", 28)
         self.max_typing_delay_seconds = _float("MAX_TYPING_DELAY_SECONDS", 2)
 
+        # Limite de mensagens por pessoa (janela deslizante), checado antes de baixar
+        # imagem, rodar OCR ou chamar o modelo. Protege a cota diaria dos modelos :free,
+        # compartilhada por todos. 0 desliga.
+        self.rate_limit_messages = _int("RATE_LIMIT_MESSAGES", 8)
+        self.rate_limit_window_seconds = _float("RATE_LIMIT_WINDOW_SECONDS", 60)
+
         # Cargos que, alem de administrador/gerenciar servidor/gerenciar mensagens,
         # podem apagar dados do bot. Nome ou id, separados por virgula. Ver
         # app/permissions.py.

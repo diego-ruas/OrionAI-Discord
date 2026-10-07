@@ -1,5 +1,6 @@
 from ..config import config
 from ..utils.http_client import get_session
+from ..utils.safety import validate_fetch_url, validate_search_query
 
 BASE_URL = "https://api.fastcrw.com/v1"
 
@@ -24,6 +25,7 @@ async def _crw_request(path, body):
 
 
 async def web_search(query, max_results=5):
+    query = validate_search_query(query)
     data = await _crw_request("/search", {"query": query, "limit": max_results})
     results = data.get("results") or data.get("data") or []
     return [
@@ -36,6 +38,7 @@ async def web_search(query, max_results=5):
 
 
 async def fetch_page(url):
+    url = validate_fetch_url(url)
     data = await _crw_request("/scrape", {"url": url, "formats": ["markdown"]})
     markdown = data.get("markdown") or (data.get("data") or {}).get("markdown", "")
     if not markdown:
