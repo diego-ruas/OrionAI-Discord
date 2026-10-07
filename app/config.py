@@ -192,7 +192,8 @@ MEMORY_INSTRUCTIONS = (
     "relevante, sem anunciar que lembrou. Cada mensagem tem um autor, o nome em "
     "negrito no comeco; ao dizer quem falou algo, so atribua a quem esta escrito la. "
     "Se nao tiver certeza de quem disse, diga que nao lembra quem foi "
-    "em vez de chutar um nome. Se a pessoa pedir para voce esquecer algo, "
+    "em vez de chutar um nome. Nunca invente memorias nem atribua a uma pessoa o que "
+    "outra pediu ou disse. Se a pessoa pedir para voce esquecer algo, "
     "use a ferramenta forget_fact."
 )
 
@@ -251,8 +252,22 @@ class Config:
                 "OPENROUTER_FALLBACK_MODELS",
                 "nvidia/nemotron-3-ultra-550b-a55b:free,"
                 "nvidia/nemotron-3-super-120b-a12b:free,"
+                "google/gemma-4-31b-it:free,"
+                "thinkingmachines/inkling:free,"
+                "nvidia/nemotron-3.5-lightning:free,"
+                "poolside/laguna-xs-2.1:free,"
+                "google/gemma-4-26b-a4b-it:free,"
                 "cohere/north-mini-code:free",
             ).split(",")
+            if m.strip()
+        ]
+        # Google AI Studio (Gemini, camada gratuita) como ultimo recurso da cadeia, depois dos
+        # modelos do OpenRouter. Cota propria, entao cobre o dia em que o pool gratuito do
+        # OpenRouter acaba. Sem GOOGLE_API_KEY a cadeia fica so no OpenRouter.
+        self.google_api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+        self.google_models = [
+            m.strip()
+            for m in _text("GOOGLE_MODELS", "gemini-3.5-flash-lite").split(",")
             if m.strip()
         ]
         # Para onde vao as chamadas de visao. Por padrao o proprio OpenRouter, mas

@@ -18,6 +18,14 @@ services:
       VISION_MODEL: ${VISION_MODEL:-}
       OPENROUTER_VISION_MODEL: ${OPENROUTER_VISION_MODEL:-}
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
+      # Ultimo recurso da cadeia: Gemini no Google AI Studio (camada gratuita). Vazio = desligado.
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_MODELS: ${GOOGLE_MODELS:-}
+      # Filtros opcionais do Jev (0 = desligado, valor de app/config.py).
+      JEV_MODEL: ${JEV_MODEL:-}
+      JEV_FOLLOWUP_THRESHOLD: ${JEV_FOLLOWUP_THRESHOLD:-}
+      JEV_INTENT_CONFIDENCE: ${JEV_INTENT_CONFIDENCE:-}
+      JEV_INJECTION_THRESHOLD: ${JEV_INJECTION_THRESHOLD:-}
       VISION_MAX_IMAGE_PX: ${VISION_MAX_IMAGE_PX:-1024}
       VISION_JPEG_QUALITY: ${VISION_JPEG_QUALITY:-85}
       OCR_ENABLED: ${OCR_ENABLED:-true}

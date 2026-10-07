@@ -201,22 +201,37 @@ def build_image_content(text, images):
     return parts
 
 
+# Google AI Studio, no formato compativel com a API da OpenAI.
+GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
+
+def default_chain():
+    """(modelo, endpoint) em ordem de tentativa: principal e fallbacks no OpenRouter e, se
+    houver GOOGLE_API_KEY, os modelos do Google AI Studio por ultimo (cota independente)."""
+    chain = [(m, None) for m in [config.model, *config.fallback_models]]
+    if config.google_api_key:
+        chain += [(m, (GOOGLE_API_URL, config.google_api_key)) for m in config.google_models]
+    return chain
+
+
 async def generate_reply(
     messages, tool_context=None, models=None, use_tools=True, endpoint=None, tool_names=None
 ):
     """tool_names restringe as ferramentas oferecidas (None = todas); lista vazia = nenhuma."""
     if tool_names is not None:
         use_tools = bool(tool_names) and use_tools
-    models_to_try = models or [config.model, *config.fallback_models]
+    chain = [(m, endpoint) for m in models] if models else default_chain()
     last_error = None
     # So o ultimo erro subia: um 429 do primeiro modelo sumia se o ultimo fallback
     # falhasse com 404/5xx, e o aviso de limite atingido nunca aparecia.
     rate_limited = None
 
-    for model in models_to_try:
+    for model, model_endpoint in chain:
         try:
             return await asyncio.wait_for(
-                _run_with_tools(model, messages, use_tools, tool_context, endpoint, tool_names),
+                _run_with_tools(
+                    model, messages, use_tools, tool_context, model_endpoint, tool_names
+                ),
                 timeout=MODEL_ATTEMPT_TIMEOUT_SECONDS,
             )
         except Exception as err:  # noqa: BLE001 - mirrors JS catch-all

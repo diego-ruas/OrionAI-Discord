@@ -86,5 +86,25 @@ def test_numero_invalido_aponta_a_variavel(config_module, monkeypatch):
 
 def test_fallback_vazio_usa_lista_padrao(config_module, monkeypatch):
     recarregado = _recarregar(monkeypatch, OPENROUTER_FALLBACK_MODELS="")
-    assert len(recarregado.config.fallback_models) == 3
+    assert recarregado.config.fallback_models
     assert all(m.endswith(":free") for m in recarregado.config.fallback_models)
+
+
+def test_cadeia_so_inclui_google_com_chave(config_module, monkeypatch):
+    from app import openrouter
+
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    sem = importlib.reload(importlib.import_module("app.config"))
+    importlib.reload(openrouter)
+    assert all(ep is None for _, ep in openrouter.default_chain())
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "chave-google")
+    monkeypatch.setenv("GOOGLE_MODELS", "gemini-a,gemini-b")
+    importlib.reload(importlib.import_module("app.config"))
+    importlib.reload(openrouter)
+    chain = openrouter.default_chain()
+    assert [m for m, _ in chain[-2:]] == ["gemini-a", "gemini-b"]
+    assert chain[-1][1] == (openrouter.GOOGLE_API_URL, "chave-google")
+    # principal e fallbacks do OpenRouter vem antes e usam o endpoint padrao
+    assert chain[0] == (sem.config.model, None)
+    assert all(ep is None for _, ep in chain[:-2])

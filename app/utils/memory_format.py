@@ -1,4 +1,6 @@
 import json
+import re
+import unicodedata
 
 SUMMARY_MAX_CHARS = 1500
 MAX_FACTS_PER_RUN = 5
@@ -180,3 +182,18 @@ def format_facts_block(facts):
         + "\n".join(lines)
         + "\n[FIM DE FATOS MEMORIZADOS]"
     )
+
+
+_MEMORY_ASK = re.compile(
+    r"\b(suas|tuas)\s+memorias\b"
+    r"|\bo\s+que\s+(voce|vc|tu)\s+(guardou|memorizou|tem\s+guardado|tem\s+memorizado)\b"
+    r"|\bo\s+que\s+(voce|vc|tu)\s+lembra\s+(de\s+mim|da\s+gente|de\s+nos|do\s+canal|daqui)\b"
+)
+
+
+def asks_memory_list(text):
+    """Pergunta pedindo para listar a memoria do bot. O modelo respondia isso de cabeca,
+    misturava pessoas e inventava; a lista de verdade e a do comando de memoria."""
+    folded = unicodedata.normalize("NFKD", (text or "").lower())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    return _MEMORY_ASK.search(folded) is not None

@@ -260,7 +260,9 @@ O bot tenta `OPENROUTER_MODEL` e, se ele falhar por qualquer motivo (rate limit,
 HTTP, resposta vazia), desce a lista de `OPENROUTER_FALLBACK_MODELS` na ordem. Com
 modelos `:free` isso nao e opcional: um unico 429 sem fallback ja vira "nao consegui
 responder". Todos os modelos da cadeia precisam suportar tool calling, porque as
-ferramentas vao em toda chamada.
+ferramentas vao em toda chamada. Com `GOOGLE_API_KEY`, os modelos de `GOOGLE_MODELS`
+(Gemini no Google AI Studio, camada gratuita) entram por ultimo, com cota propria. Na
+camada gratuita o Google pode usar as mensagens para melhorar os produtos dele.
 
 Quando algo falha, o log traz o motivo real: `[openrouter] Falha com <modelo>: ...`
 com o status HTTP e o corpo da resposta, e `[bot]` com o traceback completo.

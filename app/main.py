@@ -47,6 +47,7 @@ from .utils.safety import RateLimiter, limit_user_mentions
 from .utils.clock import local_hhmm, now_description
 from .utils.image_processor import extract_images, has_images
 from .utils.http_client import close_session
+from .utils.memory_format import asks_memory_list
 from .utils.reply_format import TRUNCATION_NOTE, split_reply, truncate_reply, typing_delay
 
 intents = discord.Intents.default()
@@ -876,6 +877,12 @@ async def on_message(message):
         set_muted(channel_id, False)
 
     if await handle_command(message, channel_id, text):
+        return
+
+    # "Quais sao suas memorias?" tem resposta exata: a lista do comando, nao o palpite do
+    # modelo. So sem imagem anexa, para nao engolir uma mensagem que pede outra coisa.
+    if not has_images(message.attachments) and asks_memory_list(text):
+        await handle_memory_command(message, channel_id)
         return
 
     images = []

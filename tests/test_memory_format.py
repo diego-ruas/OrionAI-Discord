@@ -80,3 +80,13 @@ def test_resolve_subject():
     assert resolve_subject("Canal", ROWS_ANA) == "canal"
     assert resolve_subject("tio do Joao", ROWS_ANA) == "tio do Joao"
     assert resolve_subject("", ROWS_ANA) is None
+
+
+def test_asks_memory_list():
+    from app.utils.memory_format import asks_memory_list
+
+    assert asks_memory_list("quais são suas memórias atuais?")
+    assert asks_memory_list("o que vc guardou sobre a gente")
+    assert asks_memory_list("o que você lembra de mim?")
+    assert not asks_memory_list("o que você sabe sobre rust?")
+    assert not asks_memory_list("minhas memórias de infância são boas")
