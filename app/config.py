@@ -171,23 +171,16 @@ MENTION_INSTRUCTIONS = (
     "ou cargos."
 )
 
-# Sempre anexado: como usar a memoria de longo prazo (ferramentas remember_fact /
-# forget_fact, ver app/tools/__init__.py). O historico normal tem poucas mensagens
-# e se perde; isso e o que sobrevive.
+# Sempre anexado: como usar a memoria do canal. Os fatos sao captados pela curadoria em
+# segundo plano (app/memory.py); so forget_fact (app/tools/__init__.py) fica com o modelo.
 MEMORY_INSTRUCTIONS = (
-    "\n\nVoce tem uma memoria de longo prazo separada do historico da conversa. O "
-    "historico guarda apenas as ultimas mensagens e depois se perde; o que voce "
-    "salvar com a ferramenta remember_fact fica para sempre naquele canal. Use "
-    "remember_fact quando aparecer algo que seria estranho esquecer numa proxima "
-    "conversa: nome ou apelido preferido, o que a pessoa faz, projetos em "
-    "andamento, gostos e desgostos fortes, decisoes tomadas, como ela prefere que "
-    "voce responda. Salve fatos curtos e em uma frase, um por chamada, e sempre "
-    "identificando de quem e o fato no campo 'about'. Nao salve trivialidades da "
-    "conversa atual, nada que a pessoa claramente falou de passagem, e nada "
-    "sensivel (senhas, dados de documento, endereco, saude) mesmo se contarem "
-    "espontaneamente. Nao anuncie que esta salvando algo, apenas salve e continue "
-    "a conversa normalmente. Se a pessoa pedir para voce esquecer algo, use "
-    "forget_fact."
+    "\n\nAlem do historico recente, voce tem duas memorias deste canal, mostradas no fim "
+    "destas instrucoes: um resumo das conversas mais antigas e uma lista de fatos de "
+    "longo prazo. As duas sao atualizadas automaticamente depois de cada conversa, "
+    "entao voce nao precisa fazer nada para guardar algo; se pedirem para voce lembrar "
+    "de alguma coisa, so confirme com naturalidade. Use o que ja sabe quando for "
+    "relevante, sem anunciar que lembrou. Se a pessoa pedir para voce esquecer algo, "
+    "use a ferramenta forget_fact."
 )
 
 # Sempre anexado: o bot nao agenda nem executa nada fora da conversa, entao nao pode
@@ -276,15 +269,18 @@ class Config:
         # ferramentas. Desligado: o modelo de visao responde direto, numa chamada so.
         self.vision_describe_only = _flag("VISION_DESCRIBE_ONLY", True)
 
-        self.memory_max_messages = int(os.environ.get("MEMORY_MAX_MESSAGES", "20"))
+        self.memory_max_messages = _int("MEMORY_MAX_MESSAGES", 40)
         # 900 cortava resposta tecnica boa no meio: o modelo explicava direito e o
         # corte transformava isso em texto pela metade com aviso de truncado. Quem
         # segura o tamanho e o prompt (brevidade e o padrao); este limite existe so
         # como teto de seguranca, e nao como o formato desejado da resposta.
         self.max_reply_chars = _int("MAX_REPLY_CHARS", 1700)
 
-        # Fatos de longo prazo por canal (ferramenta remember_fact).
-        self.max_facts_per_channel = int(os.environ.get("MAX_FACTS_PER_CHANNEL", "40"))
+        # Fatos de longo prazo por canal (curadoria em segundo plano, app/memory.py).
+        self.max_facts_per_channel = _int("MAX_FACTS_PER_CHANNEL", 80)
+        # Quantos desses fatos uma mesma pessoa pode ter criado. Sem isso, uma pessoa so
+        # ocupa todos os espacos e trava a memoria do canal. 0 desliga.
+        self.max_facts_per_author = _int("MAX_FACTS_PER_AUTHOR", 15)
 
         # Mensagens do canal que nao foram direcionadas ao bot, guardadas so para o
         # bot saber do que se estava falando quando finalmente for chamado. 0 desliga.

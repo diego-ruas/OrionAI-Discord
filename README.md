@@ -13,10 +13,11 @@ app/
   main.py            # cliente discord.py, comandos e loop de mensagens
   config.py           # variaveis de ambiente e blocos fixos do prompt
   db.py               # SQLite: historico, fatos e contexto do canal
+  memory.py           # curadoria da memoria em segundo plano: fatos e resumo
   openrouter.py        # chamadas ao OpenRouter com tools, visao e fallback de modelos
   permissions.py       # quem pode executar operacoes destrutivas
   tools/
-    __init__.py        # tools: web_search, fetch_page, remember_fact, forget_fact
+    __init__.py        # tools: web_search, fetch_page, forget_fact
     crw.py              # integracao com fastCRW
   utils/
     clock.py            # data/hora local da conversa
@@ -25,6 +26,7 @@ app/
     ocr.py              # OCR local via tesseract
     presence.py         # status/presenca do bot
     reply_format.py     # corte limpo e quebra da resposta em varias mensagens
+    memory_format.py    # prompt e parsing da curadoria
 ```
 
 Bancos criados por versoes antigas do bot (memoria por usuario, tabela `messages` sem
@@ -198,16 +200,23 @@ apagar a memoria do canal sem passar por comando nenhum.
 Em DM a restricao nao se aplica - nao ha hierarquia ali, e o historico e da propria
 pessoa; bloquear trancaria alguem para fora dos proprios dados.
 
+A permissao e avaliada no canal em que o comando foi dado, entao overwrites de canal
+(conceder ou negar "gerenciar mensagens") contam. Com a memoria cheia, o bot para de
+memorizar em vez de expulsar fatos antigos, e so quem modera abre espaco. Assim ninguem
+apaga a memoria do canal enchendo-a.
+
 ## Memoria
 
 Sao duas memorias diferentes:
 
-- **Historico**: as ultimas `MEMORY_MAX_MESSAGES` mensagens do canal. Rotativo, e
-  apagado por `o!reset`.
-- **Longo prazo**: fatos que o proprio modelo decide salvar (apelido, profissao,
-  projetos, preferencias de resposta) com a ferramenta `remember_fact`. Sobrevive a
-  rotacao do historico e ao `o!reset`; e visivel com `o!memoria` e removivel com
-  `o!esquecer`. Limite por canal em `MAX_FACTS_PER_CHANNEL`.
+- **Historico**: as ultimas `MEMORY_MAX_MESSAGES` mensagens vao inteiras para o modelo.
+- **Resumo**: o que sai dessa janela e incorporado a um resumo do canal, em lotes de 10
+  ou mais mensagens. E apagado por `o!reset`.
+- **Longo prazo**: fatos captados automaticamente cerca de 45s depois que a conversa
+  para, por uma chamada separada ao modelo, sem atrasar a resposta. Sao visiveis com
+  `o!memoria` e removiveis com `o!esquecer`. Com `MAX_FACTS_PER_CHANNEL` cheio, nada e
+  expulso; fato novo e descartado. Cada pessoa pode ter criado no maximo
+  `MAX_FACTS_PER_AUTHOR` desses fatos, para ninguem ocupar todos os espacos sozinha.
 
 ## Nada de agendamento
 

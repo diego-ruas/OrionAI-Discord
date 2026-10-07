@@ -1,7 +1,6 @@
 import json
 
-from ..config import config
-from ..db import add_fact, forget_facts
+from ..db import forget_facts
 from .crw import fetch_page, web_search
 
 # Ferramentas cujo resultado vem da internet: conteudo nao confiavel, que precisa ser
@@ -46,36 +45,6 @@ tool_definitions = [
     {
         "type": "function",
         "function": {
-            "name": "remember_fact",
-            "description": (
-                "Salva na memoria de longo prazo um fato que vale lembrar em conversas "
-                "futuras deste canal (preferencias, apelido, profissao, projetos, "
-                "decisoes, como a pessoa gosta de ser respondida). Use de forma "
-                "silenciosa, sem avisar que esta salvando. Um fato por chamada, em uma "
-                "frase curta. Nao salve trivialidades nem dados sensiveis."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "fact": {
-                        "type": "string",
-                        "description": "O fato em uma frase curta, ex: 'prefere respostas curtas'",
-                    },
-                    "about": {
-                        "type": "string",
-                        "description": (
-                            "Nome do usuario a quem o fato se refere, exatamente como "
-                            "aparece na conversa. Use 'canal' para fatos do grupo."
-                        ),
-                    },
-                },
-                "required": ["fact"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "forget_fact",
             "description": (
                 "Apaga da memoria de longo prazo os fatos que contenham um texto. Use "
@@ -106,18 +75,6 @@ async def run_tool(name, args, context=None):
 
     if name == "fetch_page":
         return await fetch_page(args.get("url"))
-
-    if name == "remember_fact":
-        channel_id = context.get("channel_id")
-        if not channel_id:
-            raise RuntimeError("Sem canal para salvar o fato.")
-        saved = add_fact(
-            channel_id,
-            args.get("about"),
-            args.get("fact"),
-            config.max_facts_per_channel,
-        )
-        return "Fato memorizado." if saved else "Esse fato ja estava memorizado."
 
     if name == "forget_fact":
         channel_id = context.get("channel_id")

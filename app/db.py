@@ -76,7 +76,7 @@ _conn.executescript(
     -- do usuario, entao dropar e seguro.
     DROP INDEX IF EXISTS idx_messages_user;
     -- Memoria de longo prazo: fatos que sobrevivem a rotacao do historico e ao reset
-    -- de mensagens. Escritos pelo modelo via ferramenta remember_fact.
+    -- de mensagens. Escritos pela curadoria em segundo plano (app/memory.py).
     CREATE TABLE IF NOT EXISTS facts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id TEXT NOT NULL,
@@ -102,8 +102,20 @@ _conn.executescript(
         channel_id TEXT PRIMARY KEY,
         muted_at INTEGER NOT NULL
     );
+    -- Resumo rodando da conversa que ja saiu do historico e ate onde a curadoria de
+    -- fatos ja leu. Uma linha por canal.
+    CREATE TABLE IF NOT EXISTS channel_memory (
+        channel_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL DEFAULT '',
+        curated_until INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+    );
     """
 )
+# Coluna nova em banco existente: ADD COLUMN nao toca nos dados. Fatos antigos ficam
+# sem autor (NULL) e nao contam para a cota de ninguem.
+if "author_id" not in [r[1] for r in _conn.execute("PRAGMA table_info(facts)")]:
+    _conn.execute("ALTER TABLE facts ADD COLUMN author_id TEXT")
 _conn.commit()
 
 
@@ -157,13 +169,85 @@ def clear_history(channel_id):
     with _conn:
         _conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,))
         _conn.execute("DELETE FROM ambient_messages WHERE channel_id = ?", (channel_id,))
+        _conn.execute("DELETE FROM channel_memory WHERE channel_id = ?", (channel_id,))
+
+
+def _rows_to_dicts(rows):
+    return [
+        {
+            "id": r[0],
+            "user_id": r[1],
+            "username": r[2] or "alguem",
+            "role": r[3],
+            "content": r[4],
+        }
+        for r in rows
+    ]
+
+
+def get_messages_after(channel_id, after_id, limit):
+    rows = _conn.execute(
+        "SELECT id, user_id, username, role, content FROM messages "
+        "WHERE channel_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
+        (channel_id, after_id, limit),
+    ).fetchall()
+    return _rows_to_dicts(rows)
+
+
+def get_oldest_messages(channel_id, limit):
+    rows = _conn.execute(
+        "SELECT id, user_id, username, role, content FROM messages "
+        "WHERE channel_id = ? ORDER BY id ASC LIMIT ?",
+        (channel_id, limit),
+    ).fetchall()
+    return _rows_to_dicts(rows)
+
+
+# --- Resumo rodando e progresso da curadoria ---
+
+
+def get_channel_memory(channel_id):
+    row = _conn.execute(
+        "SELECT summary, curated_until FROM channel_memory WHERE channel_id = ?",
+        (channel_id,),
+    ).fetchone()
+    if not row:
+        return {"summary": "", "curated_until": 0}
+    return {"summary": row[0], "curated_until": row[1]}
+
+
+def fold_into_summary(channel_id, summary, up_to_id):
+    """Grava o resumo e apaga as mensagens incorporadas na mesma transacao, para
+    nenhuma mensagem sumir sem o resumo ter sido gravado."""
+    with _conn:
+        _conn.execute(
+            "INSERT INTO channel_memory (channel_id, summary, curated_until, updated_at) "
+            "VALUES (?, ?, 0, ?) ON CONFLICT(channel_id) DO UPDATE SET "
+            "summary = excluded.summary, updated_at = excluded.updated_at",
+            (channel_id, summary, _now_ms()),
+        )
+        _conn.execute(
+            "DELETE FROM messages WHERE channel_id = ? AND id <= ?",
+            (channel_id, up_to_id),
+        )
+
+
+def set_curated_until(channel_id, message_id):
+    with _conn:
+        _conn.execute(
+            "INSERT INTO channel_memory (channel_id, summary, curated_until, updated_at) "
+            "VALUES (?, '', ?, ?) ON CONFLICT(channel_id) DO UPDATE SET "
+            "curated_until = excluded.curated_until, updated_at = excluded.updated_at",
+            (channel_id, message_id, _now_ms()),
+        )
 
 
 # --- Memoria de longo prazo (fatos) ---
 
 
-def add_fact(channel_id, subject, fact, max_facts):
-    """Salva um fato. Ignora duplicata exata. Retorna True se salvou de fato."""
+def add_fact(channel_id, subject, fact, max_facts, author_id=None, max_per_author=0):
+    """Salva um fato. Retorna True se salvou; False se duplicata, memoria cheia ou
+    autor no limite."""
     fact = (fact or "").strip()
     if not fact:
         return False
@@ -176,19 +260,31 @@ def add_fact(channel_id, subject, fact, max_facts):
         return False
 
     with _conn:
+        # Rotacao automatica deixava qualquer pessoa expulsar a memoria inteira do
+        # canal so enchendo-a; agora so quem modera abre espaco (esquecer).
+        count = _conn.execute(
+            "SELECT COUNT(*) FROM facts WHERE channel_id = ?", (channel_id,)
+        ).fetchone()[0]
+        if count >= max_facts:
+            return False
+        # Cota por autor: sem ela uma pessoa so ocupava todos os espacos do canal.
+        if author_id and max_per_author > 0:
+            mine = _conn.execute(
+                "SELECT COUNT(*) FROM facts WHERE channel_id = ? AND author_id = ?",
+                (channel_id, str(author_id)),
+            ).fetchone()[0]
+            if mine >= max_per_author:
+                return False
         _conn.execute(
-            "INSERT INTO facts (channel_id, subject, fact, created_at) VALUES (?, ?, ?, ?)",
-            (channel_id, (subject or "").strip() or None, fact, _now_ms()),
-        )
-        # Mantem apenas os mais recentes, pra memoria nao crescer sem limite nem estourar
-        # o prompt de sistema.
-        _conn.execute(
-            """
-            DELETE FROM facts WHERE channel_id = ? AND id NOT IN (
-                SELECT id FROM facts WHERE channel_id = ? ORDER BY id DESC LIMIT ?
-            )
-            """,
-            (channel_id, channel_id, max_facts),
+            "INSERT INTO facts (channel_id, subject, fact, author_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                channel_id,
+                (subject or "").strip() or None,
+                fact,
+                str(author_id) if author_id else None,
+                _now_ms(),
+            ),
         )
     return True
 

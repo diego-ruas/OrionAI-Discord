@@ -16,6 +16,7 @@ from .db import (
     count_messages,
     delete_fact,
     get_ambient_messages,
+    get_channel_memory,
     get_facts,
     get_history,
     is_muted,
@@ -28,8 +29,10 @@ from .openrouter import (
     generate_reply,
     generate_vision_reply,
 )
+from .memory import HISTORY_SAFETY_MARGIN, schedule_curation
 from .permissions import can_manage, denial_message
 from .utils import ocr, presence
+from .utils.memory_format import format_facts_block, format_summary_block
 from .utils.clock import now_description
 from .utils.image_processor import extract_images, has_images
 from .utils.http_client import close_session
@@ -485,7 +488,8 @@ def build_status_text(channel_id):
     return (
         f"Modelo de texto: `{config.model}`\n"
         f"Modelo de imagem: `{config.vision_model}`\n"
-        f"Historico deste canal: {stored}/{config.memory_max_messages} mensagens\n"
+        f"Historico deste canal: {min(stored, config.memory_max_messages)}/{config.memory_max_messages} mensagens\n"
+        f"Resumo de conversas antigas: {'sim' if get_channel_memory(channel_id)['summary'] else 'ainda nao'}\n"
         f"Memoria de longo prazo: {fact_count}/{config.max_facts_per_channel} itens\n"
         f"Contexto do canal captado: {ambient} mensagens\n"
         f"Agora: {now_description(config.timezone)}"
@@ -581,16 +585,11 @@ def build_dynamic_context(message, channel_id):
 
     facts = get_facts(channel_id)
     if facts:
-        lines = []
-        for fact in facts:
-            subject = f"{fact['subject']}: " if fact["subject"] else ""
-            lines.append(f"- {subject}{fact['fact']}")
-        sections.append(
-            "O que voce ja sabe de conversas anteriores (sua memoria de longo prazo). "
-            "Use naturalmente quando for relevante, sem anunciar que lembrou:\n"
-            + "\n".join(lines)
-        )
+        sections.append(format_facts_block(facts))
 
+    summary = get_channel_memory(channel_id)["summary"]
+    if summary:
+        sections.append(format_summary_block(summary))
     ambient = get_ambient_messages(channel_id, config.ambient_context_messages)
     if ambient:
         # Mensagens ambiente vem de terceiros que nem falaram com o bot: entram como
@@ -952,16 +951,17 @@ async def on_message(message):
                     message.author.name,
                     "user",
                     stored_text,
-                    config.memory_max_messages,
+                    config.memory_max_messages + HISTORY_SAFETY_MARGIN,
                 )
                 add_message(
                     channel_id,
                     str(client.user.id),
                     client.user.name,
                     "assistant",
-                    reply,
-                    config.memory_max_messages,
+                    armazenado,
+                    config.memory_max_messages + HISTORY_SAFETY_MARGIN,
                 )
+                schedule_curation(channel_id)
                 # `parar` durante a geracao vale mais que esta resposta: nao reabre a janela.
                 if _stopped_at.get((channel_id, user_id), -1.0) < started:
                     _mark_engagement(channel_id, user_id)
