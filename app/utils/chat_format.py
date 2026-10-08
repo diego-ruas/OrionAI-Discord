@@ -131,6 +131,28 @@ def resolve_mentions(text, people, no_ping=frozenset(), allow_ping=True):
     return pattern.sub(to_mention, text)
 
 
+_CUSTOM_EMOJI = re.compile(r"<a?:(\w+):\d+>")
+
+# Trechos que so o codigo escreve: se o usuario digitar igual, o modelo leria como
+# aviso do sistema ou como fala de outra pessoa.
+_FORGERY = (
+    (re.compile(r"\(\s*aviso do c[oó]digo", re.I), "(aviso escrito pelo usuario"),
+    (re.compile(r"\(\s*usu[aá]rios mencionados de verdade", re.I), "(usuarios citados"),
+    (re.compile(r"\(\s*essa mensagem [eé] uma resposta a", re.I), "(resposta a"),
+    (re.compile(r"\(\s*id\s*:", re.I), "(id "),
+    (re.compile(r"\[\s*(in[ií]cio|fim) de", re.I), r"(\1 de"),
+)
+
+
+def sanitize_user_text(text):
+    """Texto do usuario sem forjar a estrutura do prompt (avisos do codigo, linha de
+    outra pessoa, marcadores de bloco) e com emoji customizado legivel."""
+    text = _CUSTOM_EMOJI.sub(r":\1:", str(text or ""))
+    for pattern, replacement in _FORGERY:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def format_history(history, tz_name):
     """Historico para o modelo. So turnos de usuario ganham rotulo e horario: prefixo em
     turno do assistente seria copiado pelo modelo nas respostas."""
@@ -139,6 +161,7 @@ def format_history(history, tz_name):
     for h in history:
         content = render_mentions(h["content"], people)
         if h["role"] == "user":
+            content = sanitize_user_text(content)
             created = h.get("created_at")
             content = format_user_line(
                 speaker_label(h.get("display_name"), h.get("username")),
@@ -157,10 +180,7 @@ def format_ambient_block(ambient, tz_name):
         return None
     lines = []
     for m in ambient:
-        content = " ".join(m["content"].split())
-        content = content.replace(
-            "[INICIO DE MENSAGENS DO CANAL", "(INICIO DE MENSAGENS DO CANAL"
-        ).replace("[FIM DE MENSAGENS DO CANAL", "(FIM DE MENSAGENS DO CANAL")
+        content = sanitize_user_text(" ".join(m["content"].split()))
         label = speaker_label(m.get("display_name"), m.get("username"))
         if m.get("user_id"):
             label = f"{label} (id: {m['user_id']})"
@@ -196,3 +216,20 @@ def strip_leading_mention(text, user_id):
     """Tira a marcacao de quem esta sendo respondido do comeco da resposta. A resposta ja
     fica ligada a mensagem da pessoa; marcar de novo vira ping redundante."""
     return re.sub(rf"^\s*<@!?{re.escape(str(user_id))}>[\s,:;\-]*", "", text, count=1)
+
+
+def blocked_names_in(text, people, no_ping):
+    """Apelidos de quem pediu para nao ser marcado e aparece citado no texto."""
+    found = []
+    for uid in no_ping:
+        person = people.get(uid)
+        if not person:
+            continue
+        for name in (person["display_name"], person["username"]):
+            name = " ".join(str(name or "").split())
+            if len(name) >= 2 and re.search(
+                r"(?<!\w)" + re.escape(name) + r"(?!\w)", text, re.IGNORECASE
+            ):
+                found.append(_mention_name(person))
+                break
+    return found

@@ -67,3 +67,15 @@ def test_rotulo_copiado_do_prompt_volta_a_ser_so_o_apelido():
     assert resolve_mentions("oi Niro (@niro_x)!", people, allow_ping=False) == "oi Niro!"
     # mesmo com ping liberado, o rotulo copiado nao vira marcacao
     assert resolve_mentions("oi Niro (@niro_x)!", people) == "oi Niro!"
+
+
+def test_blocked_names_in():
+    from app.utils.chat_format import blocked_names_in
+
+    people = known_people(
+        [{"user_id": "1", "username": "niro_x", "display_name": "Niro"},
+         {"user_id": "2", "username": "pendy", "display_name": "Pendy"}]
+    )
+    assert blocked_names_in("Marca o niro", people, {"1"}) == ["Niro"]
+    assert blocked_names_in("marca o pendy", people, {"1"}) == []
+    assert blocked_names_in("niroxyz", people, {"1"}) == []

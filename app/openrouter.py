@@ -89,6 +89,25 @@ async def _call_model(session, model, messages, use_tools, endpoint=None, tool_n
         return message
 
 
+SEARCH_TOOLS = {"web_search", "fetch_page"}
+
+
+async def _announce_search(name, tool_context):
+    """Avisa a pessoa, uma vez por resposta, que o bot foi pesquisar. O aviso e do codigo:
+    depender do modelo escrever "vou buscar" nao e confiavel, e ele pode repetir ou esquecer."""
+    if name not in SEARCH_TOOLS or not tool_context:
+        return
+    notify = tool_context.get("notify_search")
+    if not notify or tool_context.get("_search_notified"):
+        return
+    # Marca antes: um fallback de modelo refaz a busca e nao pode avisar de novo.
+    tool_context["_search_notified"] = True
+    try:
+        await notify()
+    except Exception as err:  # noqa: BLE001 - aviso falhar nao pode impedir a busca
+        print(f"[openrouter] Falha ao avisar da busca: {err}")
+
+
 async def _run_with_tools(
     model, initial_messages, use_tools, tool_context, endpoint=None, tool_names=None
 ):
@@ -144,6 +163,7 @@ async def _run_with_tools(
                     args = json.loads(function.get("arguments") or "{}")
                     if not isinstance(args, dict):
                         raise ValueError("argumentos nao sao um objeto")
+                    await _announce_search(name, tool_context)
                     raw_result = await run_tool(name, args, tool_context)
                     if name in UNTRUSTED_TOOLS:
                         result = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(

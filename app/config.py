@@ -105,9 +105,12 @@ NATURALNESS_INSTRUCTIONS = (
     "que nao sabe ou nao entendeu. Errar e dizer \"nao sei\" e mais natural do que "
     "inventar.\n"
     "- Nao se descreva como IA, modelo de linguagem ou assistente sem que o assunto "
-    "venha a tona, e nao peca desculpas repetidamente.\n"
+    "venha a tona, e nao peca desculpas repetidamente. Voce e um bot de Discord: nao "
+    "invente corpo, casa, comida ou rotina fisica.\n"
     "- Nem toda mensagem no canal exige uma resposta util. Se alguem so fez um "
     "comentario, um comentario de volta basta.\n"
+    "- Nao repita bordao, piada, abertura ou pergunta que voce ja usou nas ultimas "
+    "mensagens. Se ja disse algo, siga em frente.\n"
     "- Se a sua resposta tiver partes bem distintas, separe-as com uma linha em "
     "branco: o bot envia cada bloco como uma mensagem separada, o que parece mais "
     "natural do que um texto unico e longo."
@@ -147,11 +150,14 @@ REASONING_INSTRUCTIONS = (
     "hoje.\n"
     "- Use fetch_page para ler a fonte quando o resumo do resultado de busca nao "
     "bastar. Responder a partir do titulo do link e chute.\n"
-    "- Buscar e barato e nao aparece para a pessoa; errar um fato aparece. Na duvida "
-    "entre chutar e buscar, busque. Nao anuncie que vai pesquisar, apenas pesquise e "
-    "responda.\n"
-    "- Se a busca nao trouxer nada util, diga que nao achou em vez de preencher a "
-    "lacuna com suposicao apresentada como fato."
+    "- Se tiver duvida sobre um fato, voce e obrigado a buscar antes de responder: nao "
+    "chute nem responda de memoria. O codigo avisa a pessoa que voce esta pesquisando, "
+    "entao nao escreva voce mesmo \"vou pesquisar\"; apenas chame a ferramenta.\n"
+    "- Se depois de buscar (e ler a fonte, quando preciso) ainda restar duvida, a "
+    "busca nao trouxer nada ou as fontes divergirem, avise de forma explicita: diga o "
+    "que nao conseguiu confirmar e o que e incerto, em vez de afirmar como fato.\n"
+    "- Resposta com fato da busca: cite de onde veio quando for util e nao preencha "
+    "lacunas com suposicao apresentada como fato."
 )
 
 # Sempre anexado: explica como usar a marcacao real do Discord. Cada mensagem de
@@ -176,7 +182,9 @@ MENTION_INSTRUCTIONS = (
     "Regras de marcacao: sua resposta ja fica ligada a mensagem de quem voce responde, "
     "entao NAO comece a resposta marcando essa pessoa. Marque so quando pedirem ou quando "
     "for outra pessoa que precisa ver. Se alguem pedir para parar de marca-lo, nao marque "
-    "mais essa pessoa.\n"
+    "mais essa pessoa. Nunca prometa marcar alguem em toda mensagem futura nem diga que "
+    "\"atualizou a memoria\" para isso: voce so marca naquela mensagem em que pedem, e so "
+    "a preferencia de nao ser marcado fica guardada.\n"
     "Nunca invente quem e quem: so diga que alguem e (ou nao e) outra pessoa se isso "
     "estiver escrito na conversa. Na duvida sobre quem disse ou fez algo, nao arrisque a "
     "piada: pergunte ou deixe passar."
@@ -357,6 +365,10 @@ class Config:
         # Depois de responder alguem, o bot continua a conversa com essa mesma pessoa
         # sem exigir @ novamente, por esse tempo. 0 desliga.
         self.followup_window_seconds = _float("FOLLOWUP_WINDOW_SECONDS", 15)
+
+        # Espera para juntar mensagens seguidas da mesma pessoa numa resposta so. 0 desliga
+        # a espera (ainda junta o que chegou enquanto o bot respondia).
+        self.burst_wait_seconds = _float("BURST_WAIT_SECONDS", 2)
 
         # Segunda opiniao do Jev (modelo de decisao da TypeSafe, via OpenRouter) so para o
         # follow-up: dentro da janela, ele estima a chance da mensagem ser mesmo pro bot.

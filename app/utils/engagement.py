@@ -2,6 +2,8 @@
 as mensagens dessa pessoa sem precisar de mencao. Estado em memoria, chaves
 (channel_id_str, user_id_int)."""
 
+import re
+import unicodedata
 import time
 
 # Ultima vez que o bot respondeu cada pessoa em cada canal.
@@ -50,3 +52,27 @@ def note_message(channel_id, author_id):
     dela. Em canal cheio, quem recebeu resposta pode estar falando com outra pessoa."""
     for key in [k for k in _last_engagement if k[0] == channel_id and k[1] != author_id]:
         del _last_engagement[key]
+
+
+# "sim"/"nao" ficam de fora de proposito: podem ser a resposta a uma pergunta do bot.
+REACTION_WORDS = frozenset({
+    "ok", "okay", "blz", "beleza", "vlw", "valeu", "obg", "obrigado", "obrigada", "tmj",
+    "show", "top", "boa", "massa", "ata", "aham", "uhum", "hm", "hmm", "entendi", "certo",
+    "legal", "perfeito",
+})
+
+_LAUGH = re.compile(r"(k|ks|sk|ha|he|hi|hue|rs|ja)+")
+
+
+def is_reaction_only(text):
+    """Mensagem so de reacao (risada, "ok", "valeu", emoji): dentro da janela de follow-up
+    nao pede resposta, so alonga a conversa."""
+    folded = unicodedata.normalize("NFKD", str(text or "").lower())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    folded = re.sub(r"<a?:\w+:\d+>|<@!?\d+>", " ", folded)
+    if "?" in folded or len(folded.strip()) > 40:
+        return False
+    tokens = re.findall(r"[a-z0-9]+", folded)
+    return all(
+        t in REACTION_WORDS or (len(t) >= 2 and _LAUGH.fullmatch(t)) for t in tokens
+    )

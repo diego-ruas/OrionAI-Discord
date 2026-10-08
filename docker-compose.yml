@@ -53,6 +53,7 @@ services:
       ADMIN_ROLES: ${ADMIN_ROLES:-}
       BOT_NAMES: ${BOT_NAMES:-orionai,orion}
       FOLLOWUP_WINDOW_SECONDS: ${FOLLOWUP_WINDOW_SECONDS:-15}
+      BURST_WAIT_SECONDS: ${BURST_WAIT_SECONDS:-}
       PRESENCE: ${PRESENCE:-listening:{prefix}ajuda|watching:{guilds} servidores}
       PRESENCE_ROTATE_SECONDS: ${PRESENCE_ROTATE_SECONDS:-180}
       PRESENCE_STATUS: ${PRESENCE_STATUS:-online}

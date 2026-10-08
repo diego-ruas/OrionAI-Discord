@@ -1,5 +1,6 @@
 import ipaddress
 import re
+import unicodedata
 import time
 from urllib.parse import urlparse
 
@@ -97,6 +98,44 @@ def limit_user_mentions(text, max_mentions):
         return match.group(0) if count <= max_mentions else "alguem"
 
     return _USER_MENTION.sub(repl, text)
+
+
+def _fold(text):
+    text = unicodedata.normalize("NFKD", str(text or "").lower())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return " ".join(text.split())
+
+
+def prompt_fragments(prompt):
+    """Pedacos longos do prompt de sistema, normalizados, para detectar copia na resposta."""
+    pieces = re.split(r"[.;:\n]+", _fold(prompt))
+    return frozenset(p.strip() for p in pieces if len(p.strip()) >= 40)
+
+
+def leaks_prompt(reply, fragments):
+    """Um pedaco sozinho pode ser coincidencia; dois ou mais e copia do prompt."""
+    folded = _fold(reply)
+    return sum(1 for f in fragments if f in folded) >= 2
+
+
+_INJECTION = [
+    re.compile(p)
+    for p in (
+        r"ignor\w* (todas |as |suas |tuas |de )*(instruc|regra|orden)",
+        r"(mostr|revel|repit|imprim)\w* (o |a |seu |sua |teu |tua )*(prompt|instruc)",
+        r"system prompt|prompt de sistema|jailbreak",
+        r"modo (dev|desenvolvedor|deus|sem filtro|sem restric)",
+        r"\bdan\b",
+        r"sem (filtro|regra|restric)",
+        r"a partir de agora (voce|vc|tu) (e|sera|vai ser)",
+        r"finja (ser|que)",
+    )
+]
+
+
+def looks_like_injection(text):
+    folded = _fold(text)
+    return any(p.search(folded) for p in _INJECTION)
 
 
 class RateLimiter:
