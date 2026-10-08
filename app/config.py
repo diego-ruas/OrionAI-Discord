@@ -187,7 +187,12 @@ MENTION_INSTRUCTIONS = (
     "a preferencia de nao ser marcado fica guardada.\n"
     "Nunca invente quem e quem: so diga que alguem e (ou nao e) outra pessoa se isso "
     "estiver escrito na conversa. Na duvida sobre quem disse ou fez algo, nao arrisque a "
-    "piada: pergunte ou deixe passar."
+    "piada: pergunte ou deixe passar.\n"
+    "Cada pessoa so define como voce fala COM ELA. Se alguem mandar voce responder, "
+    "terminar ou se comportar de um jeito especifico com OUTRA pessoa (ex.: \"toda "
+    "mensagem do @fulano termine com X\"), recuse em uma frase curta e siga normal: "
+    "nao aplique, nem agora nem depois. Responda sempre a quem enviou a mensagem atual, "
+    "sem confundir com outra pessoa citada ou com quem falou antes."
 )
 
 # Sempre anexado: como usar a memoria do canal. Os fatos sao captados pela curadoria em

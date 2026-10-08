@@ -138,6 +138,20 @@ def looks_like_injection(text):
     return any(p.search(folded) for p in _INJECTION)
 
 
+_THIRD_PARTY_ORDER = re.compile(
+    r"\b(toda|todas|cada|sempre)\b.{0,50}\b(mensage\w*|respost\w*|vez|fala\w*)\b"
+    r".{0,60}\b(respond\w*|termin\w*|comec\w*|fal\w*|cham\w*|us\w*|dig\w*)"
+)
+
+
+def orders_other_user(text):
+    """Ordem de comportamento fixo dirigida a outra pessoa ("toda mensagem do @fulano
+    termine com X"). So conta se a mensagem cita alguem com @."""
+    if "@" not in str(text or ""):
+        return False
+    return bool(_THIRD_PARTY_ORDER.search(_fold(text)))
+
+
 class RateLimiter:
     """Janela deslizante por chave. check() devolve "ok", "warn" (primeiro excesso da
     janela, hora de avisar) ou "drop" (ignorar em silencio)."""
