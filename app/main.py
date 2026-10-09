@@ -75,7 +75,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.guild_messages = True
-intents.dm_messages = True
+# Sem o intent o gateway nao entrega DMs: o bot fica mudo la, sem checar em on_message.
+intents.dm_messages = config.dm_enabled
 
 client = discord.Client(
     intents=intents,

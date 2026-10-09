@@ -267,7 +267,7 @@ class Config:
         self.vision_model = (
             os.environ.get("VISION_MODEL")
             or os.environ.get("OPENROUTER_VISION_MODEL")
-            or "thinkingmachines/inkling-small:free"
+            or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
         )
         # Sem fallback, um unico 429 do modelo gratuito ja virava "nao consegui
         # responder". O padrao lista modelos ":free" maiores e com tool calling, do
@@ -282,7 +282,6 @@ class Config:
                 "nvidia/nemotron-3-ultra-550b-a55b:free,"
                 "nvidia/nemotron-3-super-120b-a12b:free,"
                 "google/gemma-4-31b-it:free,"
-                "thinkingmachines/inkling:free,"
                 "nvidia/nemotron-3.5-lightning:free,"
                 "poolside/laguna-xs-2.1:free,"
                 "google/gemma-4-26b-a4b-it:free,"
@@ -345,6 +344,10 @@ class Config:
         # Mensagens do canal que nao foram direcionadas ao bot, guardadas so para o
         # bot saber do que se estava falando quando finalmente for chamado. 0 desliga.
         self.ambient_context_messages = _int("AMBIENT_CONTEXT_MESSAGES", 12)
+
+        # Desligado, o bot nem recebe DM do gateway (fica mudo la, sem aviso). So vale
+        # depois de reiniciar.
+        self.dm_enabled = _flag("DM_ENABLED", True)
 
         # Resposta longa sai em mensagens separadas (quebrando nos paragrafos) em vez
         # de um bloco unico, com pausa de digitacao entre elas.
