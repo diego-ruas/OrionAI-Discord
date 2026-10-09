@@ -61,6 +61,10 @@ Preencha o `.env`:
 
 Sem `SEARXNG_URL` nem `CRW_API_KEY`, o bot funciona, mas sem busca na web.
 
+Links na mensagem (ate 2, fora imagens e videos) sao lidos pelo proprio codigo antes de o
+modelo responder, com o mesmo isolamento de conteudo nao confiavel do `fetch_page`. Se a
+leitura falha, o bot avisa a pessoa em vez de adivinhar o conteudo.
+
 ## Comandos
 
 Comando com o prefixo ja e um endereco direto ao bot: funciona solto no canal, sem `@`,

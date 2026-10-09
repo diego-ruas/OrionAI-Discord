@@ -30,6 +30,7 @@ from .openrouter import (
     build_image_content,
     describe_images,
     generate_reply,
+    read_links,
     generate_vision_reply,
 )
 from .memory import HISTORY_SAFETY_MARGIN, schedule_curation
@@ -57,6 +58,7 @@ from .utils.safety import (
 )
 from .utils.clock import local_hhmm, now_description
 from .utils.image_processor import extract_images, image_sources
+from .utils.links import extract_urls
 from .utils.http_client import close_session
 from .utils.memory_format import asks_memory_list
 from .utils.reply_format import (
@@ -962,7 +964,9 @@ async def on_message(message):
         await handle_memory_command(message, channel_id)
         return
 
-    sources = image_sources(message.attachments, await _message_embeds(message), message.stickers)
+    embeds = await _message_embeds(message)
+    sources = image_sources(message.attachments, embeds, message.stickers)
+    embed_media = {e.url for e in embeds if e.type in ("image", "gifv") and e.url}
     images = []
     image_names = []
     ocr_blocks = []
@@ -1008,6 +1012,8 @@ async def on_message(message):
                     description = await describe_images(images) or ""
                 except Exception as err:  # noqa: BLE001 - visao fora do ar nao mata a resposta
                     print(f"[visao] Falha ao descrever imagem: {err}")
+
+            links_block = await read_links(extract_urls(merged_text, skip=embed_media)) or ""
 
             history_rows = get_history(channel_id, config.memory_max_messages)
             history = format_history(history_rows, config.timezone)
@@ -1077,6 +1083,8 @@ async def on_message(message):
                     "texto legivel nela e a leitura de imagens por modelo esta desativada - "
                     "diga isso a pessoa em vez de tentar adivinhar o conteudo)"
                 )
+            if links_block:
+                current_content += "\n\n" + links_block
             if image_failed and merged_text:
                 current_content += (
                     "\n(a pessoa anexou uma imagem, mas o download falhou - avise que "

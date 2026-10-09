@@ -283,6 +283,30 @@ DESCRIBE_PROMPT = (
 )
 
 
+LINK_READ_TIMEOUT_SECONDS = 20
+
+
+async def _read_link(url):
+    try:
+        content = await asyncio.wait_for(
+            run_tool("fetch_page", {"url": url}), timeout=LINK_READ_TIMEOUT_SECONDS
+        )
+        note = f"Conteudo do link {url}, lido pelo codigo:"
+    except Exception as err:  # noqa: BLE001 - link fora do ar nao pode calar a resposta
+        print(f"[links] Falha ao ler {url}: {err}")
+        content = f"Nao consegui abrir: {err}"
+        note = f"Leitura do link {url} falhou (diga isso, sem adivinhar o conteudo):"
+    # Pagina de terceiro: mesmo isolamento do resultado da tool fetch_page.
+    body = UNTRUSTED_TOOL_RESULT_TEMPLATE.format(content=_neutralize_markers(content))
+    return f"{note}\n{body}"
+
+
+async def read_links(urls):
+    """Le os links que a pessoa mandou antes do modelo responder. Deixar a leitura a cargo
+    do modelo falhava: modelo free responde pelo titulo do link em vez de chamar fetch_page."""
+    return "\n\n".join(await asyncio.gather(*[_read_link(u) for u in urls]))
+
+
 async def describe_images(images):
     """Etapa 1 da visao: so descrever a imagem, com o menor prompt possivel.
 
