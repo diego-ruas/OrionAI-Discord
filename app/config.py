@@ -364,9 +364,7 @@ class Config:
 
         # Nomes que acordam o bot num canal sem precisar de @ (separados por virgula).
         self.bot_names = [
-            n.strip().lower()
-            for n in os.environ.get("BOT_NAMES", "orionai,orion").split(",")
-            if n.strip()
+            n.strip().lower() for n in _text("BOT_NAMES", "orionai,orion").split(",") if n.strip()
         ]
 
         # Depois de responder alguem, o bot continua a conversa com essa mesma pessoa
@@ -380,14 +378,16 @@ class Config:
         # Segunda opiniao do Jev (modelo de decisao da TypeSafe, via OpenRouter) so para o
         # follow-up: dentro da janela, ele estima a chance da mensagem ser mesmo pro bot.
         # 0 desliga (vale so a janela por tempo); acima de 0 e o corte da probabilidade.
-        self.jev_followup_threshold = _float("JEV_FOLLOWUP_THRESHOLD", 0)
+        # Padrao 0.5.
+        self.jev_followup_threshold = _float("JEV_FOLLOWUP_THRESHOLD", 0.5)
         self.jev_model = _text("JEV_MODEL", "typesafe/jev-1.13")
         # Intencao e tamanho da mensagem pelo Jev: so restringe as ferramentas / ajusta o
-        # tamanho quando a opcao escolhida tem pelo menos essa probabilidade. 0 desliga.
-        self.jev_intent_confidence = _float("JEV_INTENT_CONFIDENCE", 0)
+        # tamanho quando a opcao escolhida tem pelo menos essa probabilidade. 0 desliga;
+        # padrao 0.6.
+        self.jev_intent_confidence = _float("JEV_INTENT_CONFIDENCE", 0.6)
         # Probabilidade minima de "tenta mudar as regras do bot" para o codigo avisar o
-        # modelo. 0 desliga.
-        self.jev_injection_threshold = _float("JEV_INJECTION_THRESHOLD", 0)
+        # modelo. 0 desliga; padrao 0.7.
+        self.jev_injection_threshold = _float("JEV_INJECTION_THRESHOLD", 0.7)
 
         self.timezone = _text("TIMEZONE", "America/Sao_Paulo")
 
