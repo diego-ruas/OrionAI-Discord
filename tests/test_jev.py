@@ -44,7 +44,7 @@ def test_parse_choice_rejeita_opcao_desconhecida():
 
 
 def test_build_request_so_com_as_perguntas_pedidas():
-    req = jev.build_request("m", {"x": 1}, [jev.Q_INTENT])
+    req = jev.build_request("m", {"x": 1}, jev.pick([jev.Q_INTENT]))
     assert req["state"] == {"x": 1}
     assert list(req["questions"]) == [jev.Q_INTENT]
 
@@ -126,3 +126,24 @@ def test_interpret_link_na_mensagem_mantem_leitura_de_pagina():
 
 def test_interpret_desligado_nao_exige_as_respostas():
     assert jev.interpret({}, 0, 0) == {"tool_names": None, "length_hint": "", "injection": False}
+
+
+FACTS = [{"about": "a", "by": "a", "fact": "x"}, {"about": "b", "by": None, "fact": "y"}]
+
+
+def test_supported_facts_filtra_pelo_corte():
+    got = jev.supported_facts(data(noul("fact_0", 0.9), noul("fact_1", 0.3)), FACTS)
+    assert got == [FACTS[0]]
+
+
+def test_supported_facts_resposta_incompleta_levanta():
+    with pytest.raises(ValueError):
+        jev.supported_facts(data(noul("fact_0", 0.9)), FACTS)
+
+
+def test_fact_check_state():
+    rows = [{"role": "assistant", "content": "oi"}]
+    state = jev.fact_check_state(rows, FACTS)
+    assert state["messages"][0]["speaker"] == "bot"
+    assert [c["id"] for c in state["candidate_facts"]] == ["fact_0", "fact_1"]
+    assert state["candidate_facts"][1]["by"] == ""

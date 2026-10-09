@@ -2,7 +2,8 @@
 
 Usado para julgar a mensagem antes do modelo de conversa: e pro bot (follow-up), que tipo
 de ajuda pede (ferramentas), que tamanho de resposta pede e se tenta mudar as regras do
-bot. Jev nao gera texto, entao nao serve para curadoria nem para conversa.
+bot. Jev nao gera texto: nao escreve a curadoria nem a conversa, mas confere se cada fato
+que a curadoria propos foi mesmo dito.
 
 Decisoes de desenho, vindas da documentacao da TypeSafe:
 - Perguntas e criterios em ingles: e o idioma principal do Jev, os outros tem precisao menor.
@@ -176,12 +177,66 @@ def build_state(history, author_label, author_id, created_ms, text, tz_name):
     }
 
 
-def build_request(model, state, question_names):
+def pick(names):
+    return {name: QUESTIONS[name] for name in names}
+
+
+def build_request(model, state, questions):
+    return {"model": model, "state": state, "questions": questions}
+
+
+# Abaixo disso o fato e descartado. Fato perdido custa pouco; fato inventado vira
+# "memoria" que o bot repete com conviccao.
+FACT_SUPPORT_THRESHOLD = 0.7
+
+FACT_CRITERIA = {
+    "true": (
+        "The fact is stated in messages, in plain words, by the speaker named in 'by', "
+        "and it is about the person or group named in 'about'."
+    ),
+    "false": (
+        "The fact is inferred, exaggerated, a joke taken literally, said only by the bot, "
+        "said by a different person, about a different person, or not in messages at all."
+    ),
+}
+
+
+def fact_check_state(rows, facts):
+    """State para conferir fatos propostos pela curadoria contra as mensagens de onde vieram."""
+    messages = [
+        {
+            "speaker": "bot"
+            if r.get("role") == "assistant"
+            else speaker_label(r.get("display_name"), r.get("username")),
+            "text": " ".join(str(r.get("content") or "").split())[:MAX_TEXT_CHARS],
+        }
+        for r in rows
+    ]
+    candidates = [
+        {"id": f"fact_{i}", "about": f.get("about") or "", "by": f.get("by") or "", "fact": f["fact"]}
+        for i, f in enumerate(facts)
+    ]
+    return {"messages": messages, "candidate_facts": candidates}
+
+
+def fact_questions(count):
     return {
-        "model": model,
-        "state": state,
-        "questions": {name: QUESTIONS[name] for name in question_names},
+        f"fact_{i}": {
+            "type": "noul",
+            "instructions": (
+                f"Is candidate_facts entry fact_{i} supported by messages? 'about' and 'by' "
+                "are usernames without the @; match them to the @username inside each "
+                "speaker. " + LANGUAGE_NOTE
+            ),
+            "criteria": FACT_CRITERIA,
+        }
+        for i in range(count)
     }
+
+
+def supported_facts(data, facts, threshold=FACT_SUPPORT_THRESHOLD):
+    """Fatos que o Jev confirmou. Resposta fora do formato levanta ValueError (parse_noul)."""
+    return [f for i, f in enumerate(facts) if parse_noul(data, f"fact_{i}") >= threshold]
 
 
 def _answer(data, name, kind):
@@ -254,10 +309,10 @@ def message_questions(intent_confidence, injection_threshold):
     return names
 
 
-async def decide(api_key, model, state, question_names):
+async def decide(api_key, model, state, questions):
     """Uma requisicao com todas as perguntas: elas rodam em paralelo no Jev."""
     session = await get_session()
-    payload = build_request(model, state, question_names)
+    payload = build_request(model, state, questions)
     headers = {"Authorization": f"Bearer {api_key}"}
     async with session.post(DECISIONS_URL, json=payload, headers=headers) as res:
         if not res.ok:

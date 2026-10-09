@@ -181,7 +181,7 @@ async def run_curadoria(rng):
     entries = [(p, f[1]) for p, f in owners] + filler_lines(rng, people, 4)
     rng.shuffle(entries)
     rows = [build_user_row(p, t, BASE_MS + i * 60000) for i, (p, t) in enumerate(entries)]
-    reply = await generate_reply(build_curator_messages("", [], [], rows), use_tools=False)
+    reply = await generate_reply(build_curator_messages([], [], rows), use_tools=False)
     parsed = parse_curator_reply(reply)
     if parsed is None:
         return [(False, "curadoria", "JSON valido", reply or "")]

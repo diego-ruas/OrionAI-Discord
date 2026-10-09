@@ -12,7 +12,10 @@ from .db import (
     set_curated_until,
 )
 from .openrouter import generate_reply
+from .utils import jev
+from .utils.clock import local_ddmm
 from .utils.memory_format import (
+    append_summary,
     build_curator_messages,
     parse_curator_reply,
     resolve_author,
@@ -40,25 +43,49 @@ async def curate_channel(channel_id):
     if not new_rows and not fold_rows:
         return
 
+    # Temperatura 0: modelo free criativo na curadoria inventava fato e resumo.
     reply = await generate_reply(
-        build_curator_messages(state["summary"], get_facts(channel_id), fold_rows, new_rows),
+        build_curator_messages(get_facts(channel_id), fold_rows, new_rows),
         use_tools=False,
+        temperature=0,
     )
-
-    # Um o!reset durante a chamada ao modelo apagou as mensagens: gravar agora
-    # ressuscitaria resumo e fatos de conversa que a pessoa mandou apagar.
-    first_id = (fold_rows or new_rows)[0]["id"]
-    still_there = get_messages_after(channel_id, first_id - 1, 1)
-    if not still_there or still_there[0]["id"] != first_id:
-        return
     parsed = parse_curator_reply(reply)
     if parsed is None:
         print(f"[memoria] Resposta invalida da curadoria em {channel_id}: {reply[:200]!r}")
         return
 
+    facts = parsed["facts"]
+    if facts:
+        # Falha fechada: sem a confirmacao do Jev, nada vira memoria.
+        try:
+            data = await jev.decide(
+                config.openrouter_api_key,
+                config.jev_model,
+                jev.fact_check_state(new_rows, facts),
+                jev.fact_questions(len(facts)),
+            )
+            confirmed = jev.supported_facts(data, facts)
+        except Exception as err:  # noqa: BLE001
+            print(f"[memoria] Jev nao conferiu os fatos de {channel_id}, descartando: {err}")
+            confirmed = []
+        if len(confirmed) < len(facts):
+            print(
+                f"[memoria] {channel_id}: {len(facts) - len(confirmed)} fato(s) sem respaldo "
+                "descartado(s)."
+            )
+        facts = confirmed
+
+    # Um o!reset durante as chamadas (modelo e Jev) apagou as mensagens: gravar agora
+    # ressuscitaria resumo e fatos de conversa que a pessoa mandou apagar. Tem que vir
+    # depois de todo await.
+    first_id = (fold_rows or new_rows)[0]["id"]
+    still_there = get_messages_after(channel_id, first_id - 1, 1)
+    if not still_there or still_there[0]["id"] != first_id:
+        return
+
     saved = 0
     rejected = False
-    for f in parsed["facts"]:
+    for f in facts:
         author_id = resolve_author(f["by"], new_rows)
         if author_id is None:
             rejected = True
@@ -79,7 +106,13 @@ async def curate_channel(channel_id):
 
     folded = False
     if fold_rows and parsed["summary"]:
-        fold_into_summary(channel_id, parsed["summary"], fold_rows[-1]["id"])
+        ts = fold_rows[-1].get("created_at")
+        label = local_ddmm(ts, config.timezone) if ts is not None else ""
+        fold_into_summary(
+            channel_id,
+            append_summary(state["summary"], parsed["summary"], label),
+            fold_rows[-1]["id"],
+        )
         folded = True
     if new_rows:
         set_curated_until(channel_id, new_rows[-1]["id"])

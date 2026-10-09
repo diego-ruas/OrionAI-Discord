@@ -203,6 +203,7 @@ def _rows_to_dicts(rows):
             "role": r[3],
             "content": r[4],
             "display_name": r[5],
+            "created_at": r[6],
         }
         for r in rows
     ]
@@ -210,7 +211,7 @@ def _rows_to_dicts(rows):
 
 def get_messages_after(channel_id, after_id, limit):
     rows = _conn.execute(
-        "SELECT id, user_id, username, role, content, display_name FROM messages "
+        "SELECT id, user_id, username, role, content, display_name, created_at FROM messages "
         "WHERE channel_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
         (channel_id, after_id, limit),
     ).fetchall()
@@ -219,7 +220,7 @@ def get_messages_after(channel_id, after_id, limit):
 
 def get_oldest_messages(channel_id, limit):
     rows = _conn.execute(
-        "SELECT id, user_id, username, role, content, display_name FROM messages "
+        "SELECT id, user_id, username, role, content, display_name, created_at FROM messages "
         "WHERE channel_id = ? ORDER BY id ASC LIMIT ?",
         (channel_id, limit),
     ).fetchall()
