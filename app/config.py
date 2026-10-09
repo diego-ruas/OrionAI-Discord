@@ -404,6 +404,9 @@ class Config:
         # Probabilidade minima de "tenta mudar as regras do bot" para o codigo avisar o
         # modelo. 0 desliga; padrao 0.7.
         self.jev_injection_threshold = _float("JEV_INJECTION_THRESHOLD", 0.7)
+        # Conteudo da internet (pagina, busca) com texto dirigido a IA ("ignore as regras...")
+        # e descartado antes de chegar ao modelo. Probabilidade minima do Jev; 0 desliga.
+        self.jev_external_threshold = _float("JEV_EXTERNAL_THRESHOLD", 0.8)
 
         self.timezone = _text("TIMEZONE", "America/Sao_Paulo")
 
