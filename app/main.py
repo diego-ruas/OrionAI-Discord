@@ -46,6 +46,7 @@ from .utils.chat_format import (
     speaker_label,
     strip_leading_mention,
 )
+from .utils.memory_format import relevant_facts
 from .utils.safety import (
     RateLimiter,
     leaks_prompt,
@@ -211,7 +212,9 @@ async def _jev_confirms_followup(message):
         return True
     try:
         state = _jev_state(message, message.content.strip())
-        data = await jev.decide(config.openrouter_api_key, config.jev_model, state, [jev.Q_FOR_BOT])
+        data = await jev.decide(
+            config.openrouter_api_key, config.jev_model, state, jev.pick([jev.Q_FOR_BOT])
+        )
         probability = jev.parse_noul(data, jev.Q_FOR_BOT)
     except Exception as err:  # noqa: BLE001 - Jev fora do ar nao pode calar o bot
         print(f"[jev] Falha, seguindo so a janela de follow-up: {err}")
@@ -229,7 +232,7 @@ async def _jev_judge_message(message, text):
         return neutral
     try:
         state = _jev_state(message, text)
-        data = await jev.decide(config.openrouter_api_key, config.jev_model, state, names)
+        data = await jev.decide(config.openrouter_api_key, config.jev_model, state, jev.pick(names))
         return jev.interpret(
             data,
             config.jev_intent_confidence,
@@ -661,7 +664,7 @@ async def handle_command(message, channel_id, text):
 # --- Montagem do contexto ---
 
 
-def build_dynamic_context(message, channel_id):
+def build_dynamic_context(message, channel_id, text, replied_to):
     """Bloco de contexto gerado pelo codigo e anexado ao prompt de sistema."""
     bot_name = getattr(client.user, "display_name", None) or client.user.name
     identity = (
@@ -677,11 +680,14 @@ def build_dynamic_context(message, channel_id):
             f"Voce esta no canal #{channel_name} do servidor '{guild_name}', onde varias "
             "pessoas conversam."
         )
+    present = {message.author.name, *(m.name for m in message.mentions if m.id != client.user.id)}
+    if replied_to is not None and replied_to.author.id != client.user.id:
+        present.add(replied_to.author.name)
 
     return compose_context(
         now_description(config.timezone),
         place_text,
-        get_facts(channel_id),
+        relevant_facts(get_facts(channel_id), present, text),
         get_channel_memory(channel_id)["summary"],
         get_ambient_messages(channel_id, config.ambient_context_messages),
         config.timezone,
@@ -989,7 +995,7 @@ async def on_message(message):
             history_rows = get_history(channel_id, config.memory_max_messages)
             history = format_history(history_rows, config.timezone)
             system_prompt = config.build_system_prompt(
-                build_dynamic_context(message, channel_id)
+                build_dynamic_context(message, channel_id, merged_text, replied_to)
             )
             previous = [h["content"] for h in history_rows if h["role"] == "assistant"][-5:]
             current_content = build_current_content(message, merged_text, replied_to, image_names)

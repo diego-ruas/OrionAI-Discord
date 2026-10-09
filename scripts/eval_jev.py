@@ -91,7 +91,7 @@ async def run(delay):
                 config.openrouter_api_key,
                 config.jev_model,
                 state,
-                [jev.Q_FOR_BOT, jev.Q_INTENT, jev.Q_LENGTH, jev.Q_INJECTION],
+                jev.pick([jev.Q_FOR_BOT, jev.Q_INTENT, jev.Q_LENGTH, jev.Q_INJECTION]),
             )
             results.append((text, labels, data))
         except Exception as err:  # noqa: BLE001

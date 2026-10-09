@@ -68,3 +68,8 @@ def now_description(tz_name):
 def local_hhmm(timestamp_ms, tz_name):
     """Hora local HH:MM de um timestamp em milissegundos."""
     return datetime.fromtimestamp(timestamp_ms / 1000, _resolve_zone(tz_name)).strftime("%H:%M")
+
+
+def local_ddmm(timestamp_ms, tz_name):
+    """Data local DD/MM de um timestamp em milissegundos."""
+    return datetime.fromtimestamp(timestamp_ms / 1000, _resolve_zone(tz_name)).strftime("%d/%m")
