@@ -26,6 +26,8 @@ services:
       BOT_NAMES: ${BOT_NAMES:-}
       COMMAND_PREFIX: ${COMMAND_PREFIX:-}
       TIMEZONE: ${TIMEZONE:-}
+      # false = bot mudo em DM.
+      DM_ENABLED: ${DM_ENABLED:-}
     volumes:
       - ./data:/app/data
     depends_on:
