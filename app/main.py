@@ -56,7 +56,7 @@ from .utils.safety import (
     prompt_fragments,
 )
 from .utils.clock import local_hhmm, now_description
-from .utils.image_processor import extract_images, has_images
+from .utils.image_processor import extract_images, image_sources
 from .utils.http_client import close_session
 from .utils.memory_format import asks_memory_list
 from .utils.reply_format import (
@@ -731,6 +731,21 @@ def _read_images_locally_sync(images):
     return blocks
 
 
+# Embed de link (Tenor, Giphy, imagem) so aparece depois: o Discord resolve a URL em segundo
+# plano e manda a mensagem editada. Sem esperar, o GIF nunca chegaria a ser visto.
+EMBED_WAIT_SECONDS = 1.5
+
+
+async def _message_embeds(message):
+    if message.embeds or not jev.has_url(message.content):
+        return message.embeds
+    await asyncio.sleep(EMBED_WAIT_SECONDS)
+    try:
+        return (await message.channel.fetch_message(message.id)).embeds
+    except discord.HTTPException:  # sem permissao de ler historico, ou mensagem apagada
+        return message.embeds
+
+
 def should_use_vision(images, ocr_blocks):
     """Decide se a imagem precisa ir para o modelo de visao.
 
@@ -943,16 +958,17 @@ async def on_message(message):
 
     # "Quais sao suas memorias?" tem resposta exata: a lista do comando, nao o palpite do
     # modelo. So sem imagem anexa, para nao engolir uma mensagem que pede outra coisa.
-    if not has_images(message.attachments) and asks_memory_list(text):
+    if not message.attachments and not message.stickers and asks_memory_list(text):
         await handle_memory_command(message, channel_id)
         return
 
+    sources = image_sources(message.attachments, await _message_embeds(message), message.stickers)
     images = []
     image_names = []
     ocr_blocks = []
     image_failed = False
-    if has_images(message.attachments):
-        images = await extract_images(message.attachments)
+    if sources:
+        images = await extract_images(sources)
         image_names = [img["name"] for img in images]
         ocr_blocks = await read_images_locally(images)
         image_failed = not images
@@ -971,8 +987,8 @@ async def on_message(message):
     use_vision = should_use_vision(images, ocr_blocks)
 
     burst_key = (channel_id, user_id)
-    burst.add(burst_key, message.id, text, has_images(message.attachments))
-    if not has_images(message.attachments) and config.burst_wait_seconds > 0:
+    burst.add(burst_key, message.id, text, bool(sources))
+    if not sources and config.burst_wait_seconds > 0:
         await asyncio.sleep(config.burst_wait_seconds)
         if not burst.is_latest(burst_key, message.id):
             return  # mensagem mais nova da mesma pessoa vai responder tudo junto
