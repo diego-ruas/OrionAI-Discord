@@ -6,59 +6,26 @@ services:
     image: orionai-discord:latest
     container_name: orionai-discord
     restart: unless-stopped
+    # So o essencial: o resto usa o padrao de app/config.py. Para mexer em outra variavel
+    # do .env.example, acrescente a linha aqui.
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      CRW_API_KEY: ${CRW_API_KEY:-}
-      # Busca no SearXNG da stack e leitura de paginas no proprio bot (sem fastCRW). Para
-      # usar o fastCRW, tire os servicos searxng* e esta variavel do compose.
+      # Busca no SearXNG da stack e leitura de paginas no proprio bot (sem fastCRW).
       SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
-      # Vazio = padrao de app/config.py (fonte unica dos defaults de modelo).
+      # Vazio = padrao de app/config.py.
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
-      VISION_MODEL: ${VISION_MODEL:-}
-      OPENROUTER_VISION_MODEL: ${OPENROUTER_VISION_MODEL:-}
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
-      # Donos do bot: todas as permissoes e sem limite de uso. Vazio = padrao de app/config.py.
-      OWNER_IDS: ${OWNER_IDS:-}
-      # Ultimo recurso da cadeia: Gemini no Google AI Studio (camada gratuita). Vazio = desligado.
+      VISION_MODEL: ${VISION_MODEL:-}
+      # Ultimo recurso da cadeia: Gemini no Google AI Studio. Vazio = desligado.
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      GOOGLE_MODELS: ${GOOGLE_MODELS:-}
-      # Filtros opcionais do Jev (0 = desligado, valor de app/config.py).
-      JEV_MODEL: ${JEV_MODEL:-}
-      JEV_FOLLOWUP_THRESHOLD: ${JEV_FOLLOWUP_THRESHOLD:-}
-      JEV_INTENT_CONFIDENCE: ${JEV_INTENT_CONFIDENCE:-}
-      JEV_INJECTION_THRESHOLD: ${JEV_INJECTION_THRESHOLD:-}
-      VISION_MAX_IMAGE_PX: ${VISION_MAX_IMAGE_PX:-1024}
-      VISION_JPEG_QUALITY: ${VISION_JPEG_QUALITY:-85}
-      OCR_ENABLED: ${OCR_ENABLED:-true}
-      OCR_LANGS: ${OCR_LANGS:-por+eng}
-      OCR_MIN_CHARS: ${OCR_MIN_CHARS:-24}
-      OCR_SKIPS_VISION: ${OCR_SKIPS_VISION:-true}
-      VISION_ENABLED: ${VISION_ENABLED:-true}
-      VISION_DESCRIBE_ONLY: ${VISION_DESCRIBE_ONLY:-true}
-      VISION_API_BASE: ${VISION_API_BASE:-}
-      VISION_API_KEY: ${VISION_API_KEY:-}
-      MEMORY_MAX_MESSAGES: ${MEMORY_MAX_MESSAGES:-}
-      MAX_REPLY_CHARS: ${MAX_REPLY_CHARS:-}
-      MAX_FACTS_PER_CHANNEL: ${MAX_FACTS_PER_CHANNEL:-}
-      MAX_FACTS_PER_AUTHOR: ${MAX_FACTS_PER_AUTHOR:-}
-      AMBIENT_CONTEXT_MESSAGES: ${AMBIENT_CONTEXT_MESSAGES:-12}
-      SPLIT_REPLIES: ${SPLIT_REPLIES:-true}
-      MAX_REPLY_MESSAGES: ${MAX_REPLY_MESSAGES:-3}
-      TYPING_CHARS_PER_SECOND: ${TYPING_CHARS_PER_SECOND:-28}
-      MAX_TYPING_DELAY_SECONDS: ${MAX_TYPING_DELAY_SECONDS:-}
-      RATE_LIMIT_MESSAGES: ${RATE_LIMIT_MESSAGES:-}
-      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-}
-      COMMAND_PREFIX: ${COMMAND_PREFIX:-o!}
+      # Donos do bot: todas as permissoes e sem limite de uso.
+      OWNER_IDS: ${OWNER_IDS:-}
       ADMIN_ROLES: ${ADMIN_ROLES:-}
-      BOT_NAMES: ${BOT_NAMES:-orionai,orion}
-      FOLLOWUP_WINDOW_SECONDS: ${FOLLOWUP_WINDOW_SECONDS:-15}
-      BURST_WAIT_SECONDS: ${BURST_WAIT_SECONDS:-}
-      PRESENCE: ${PRESENCE:-listening:{prefix}ajuda|watching:{guilds} servidores}
-      PRESENCE_ROTATE_SECONDS: ${PRESENCE_ROTATE_SECONDS:-180}
-      PRESENCE_STATUS: ${PRESENCE_STATUS:-online}
-      TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
-      SYSTEM_PROMPT: ${SYSTEM_PROMPT:-Voce conversa com as pessoas de um servidor do Discord. Responda em portugues, num tom leve e bem-humorado, como alguem que e boa companhia no chat e por acaso tambem sabe das coisas. Va direto ao ponto - evite texto em excesso quando uma resposta curta resolve; quando o assunto exigir mais detalhe, de o detalhe, usando paragrafos curtos em vez de um bloco unico de texto.}
+      # Nomes que acordam o bot sem @.
+      BOT_NAMES: ${BOT_NAMES:-}
+      COMMAND_PREFIX: ${COMMAND_PREFIX:-}
+      TIMEZONE: ${TIMEZONE:-}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -71,9 +38,12 @@ services:
         - container: OPENROUTER_API_KEY
           description:
             en_us: OpenRouter API key
-        - container: CRW_API_KEY
+        - container: GOOGLE_API_KEY
           description:
-            en_us: fastCRW API key (optional, used for web_search/fetch_page tools)
+            en_us: Google AI Studio key (optional last-resort fallback)
+        - container: OWNER_IDS
+          description:
+            en_us: Bot owner Discord user ids
         - container: BOT_NAMES
           description:
             en_us: Comma-separated names that wake the bot without an @mention
