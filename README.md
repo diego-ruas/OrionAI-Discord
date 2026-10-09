@@ -153,7 +153,7 @@ e o schema atual e criado do zero.
 
 ### Tom
 
-O bot e descontraido: piada, trocadilho, ironia leve, giria e emoji ocasional fazem parte
+O bot e descontraido: piada, trocadilho, ironia leve e giria fazem parte
 do jeito dele, e ele devolve provocacao de quem provoca. Nao e um modo ligavel: a regra e
 um bloco fixo (`PLAYFUL_INSTRUCTIONS`) anexado depois do `SYSTEM_PROMPT`, entao prevalece
 sobre o que estiver na env var.
