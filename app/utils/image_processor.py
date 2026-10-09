@@ -86,12 +86,53 @@ def _shrink(data, content_type):
     return shrunk, "image/jpeg"
 
 
+_STICKER_MIME = {"png": "image/png", "apng": "image/png", "gif": "image/gif"}
+
+
+class _Source:
+    """Imagem a baixar. content_type None = desconhecido: vale o que o servidor disser."""
+
+    def __init__(self, url, filename, content_type=None, size=0):
+        self.url = url
+        self.filename = filename
+        self.content_type = content_type
+        self.size = size
+
+
+def image_sources(attachments, embeds=(), stickers=()):
+    """Tudo que a mensagem mostra como imagem: anexos, GIF/imagem de link (embed) e figurinha.
+
+    Embed usa so o proxy_url do Discord: a URL original e de terceiro e baixar dela pelo
+    bot saltaria validate_fetch_url (SSRF). Embed sem proxy_url (webhook, outro app) e
+    ignorado. Entram so os tipos image/gifv (Tenor, Giphy, link de imagem); previa de
+    artigo ou video e capa, nao o conteudo que a pessoa mandou.
+    Figurinha lottie e vetorial animada e nao tem como virar imagem aqui.
+    """
+    sources = [
+        _Source(a.url, a.filename, a.content_type, getattr(a, "size", 0) or 0)
+        for a in attachments
+        if getattr(a, "content_type", None) in ALLOWED_TYPES
+    ]
+    for e in embeds:
+        if getattr(e, "type", None) not in ("image", "gifv"):
+            continue
+        media = getattr(e, "thumbnail", None) or getattr(e, "image", None)
+        url = getattr(media, "proxy_url", None)
+        if url:
+            sources.append(_Source(url, url.split("?")[0].rsplit("/", 1)[-1] or "gif"))
+    for s in stickers:
+        mime = _STICKER_MIME.get(getattr(getattr(s, "format", None), "name", ""))
+        if mime:
+            sources.append(_Source(s.url, f"{s.name}.png" if mime == "image/png" else f"{s.name}.gif", mime))
+    return sources[:MAX_ATTACHMENTS_PER_MESSAGE]
+
+
 async def _process_attachment(session, attachment):
-    content_type = getattr(attachment, "content_type", None)
-    if content_type not in ALLOWED_TYPES:
+    declared = attachment.content_type
+    if declared is not None and declared not in ALLOWED_TYPES:
         return None
 
-    if (getattr(attachment, "size", 0) or 0) > MAX_ATTACHMENT_BYTES:
+    if attachment.size > MAX_ATTACHMENT_BYTES:
         print(f"[imagens] {attachment.filename} ignorado: {attachment.size} bytes acima do limite.")
         return None
 
@@ -99,6 +140,12 @@ async def _process_attachment(session, attachment):
         async with session.get(attachment.url) as res:
             if not res.ok:
                 raise RuntimeError(f"HTTP {res.status}")
+            content_type = declared or (res.content_type or "").lower()
+            if content_type not in ALLOWED_TYPES:
+                return None
+            if (res.content_length or 0) > MAX_ATTACHMENT_BYTES:
+                print(f"[imagens] {attachment.filename} ignorado: acima do limite.")
+                return None
             data = await res.read()
 
         # Processamento no Pillow e CPU-bound: roda em thread dedicada para nao
@@ -116,23 +163,15 @@ async def _process_attachment(session, attachment):
         return None
 
 
-async def extract_images(attachments):
-    """Baixa os anexos de imagem concorrentemente e devolve base64 pronto para o modelo.
+async def extract_images(sources):
+    """Baixa as imagens (de image_sources) concorrentemente e devolve base64 pronto para o modelo.
 
     Guarda tambem os bytes crus em 'data', que o OCR usa - o OCR le melhor a imagem
     original do que a versao reduzida.
     """
-    valid_attachments = [
-        a for a in attachments if getattr(a, "content_type", None) in ALLOWED_TYPES
-    ][:MAX_ATTACHMENTS_PER_MESSAGE]
-    if not valid_attachments:
+    if not sources:
         return []
 
     session = await get_session()
-    tasks = [_process_attachment(session, a) for a in valid_attachments]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*[_process_attachment(session, s) for s in sources])
     return [r for r in results if r is not None]
-
-
-def has_images(attachments):
-    return any(getattr(a, "content_type", None) in ALLOWED_TYPES for a in attachments)

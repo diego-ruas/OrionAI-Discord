@@ -246,6 +246,11 @@ comando.
 Para nenhuma imagem sair da maquina, use `VISION_ENABLED=false`: o bot responde com o que
 o OCR leu e avisa quando nao conseguiu enxergar.
 
+Alem de anexos, o bot enxerga GIF e imagem de link (Tenor, Giphy, URL de imagem, via embed
+do Discord) e figurinhas (exceto as lottie). De GIF animado ele so ve o primeiro quadro.
+Ao receber um link, espera ~1,5 s e relê a mensagem para pegar o embed, que o Discord so
+gera depois; isso precisa da permissao de ler o historico do canal.
+
 Para descricao de imagem de verdade sem nuvem, aponte a visao para um servidor compativel
 com a API da OpenAI:
 
